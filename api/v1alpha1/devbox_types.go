@@ -28,10 +28,6 @@ const (
 	ResourceCPU ResourceName = "cpu"
 	// ResourceMemory Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 	ResourceMemory ResourceName = "memory"
-	// ResourceStorage Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
-	ResourceStorage ResourceName = "storage"
-	// ResourceEphemeralStorage Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
-	ResourceEphemeralStorage ResourceName = "ephemeral-storage"
 )
 
 type ResourceList map[ResourceName]resource.Quantity
@@ -82,9 +78,9 @@ const (
 type NetworkStatus struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=NodePort;Tailnet
-	Type     NetworkType `json:"type"`
-	NodePort int32       `json:"nodePort"`
-
+	Type        NetworkType `json:"type"`
+	NodePort    int32       `json:"nodePort"`
+	ServiceName string      `json:"serviceName"`
 	// todo TailNet
 	TailNet string `json:"tailnet"`
 }
