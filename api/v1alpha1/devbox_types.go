@@ -86,8 +86,7 @@ type NetworkStatus struct {
 }
 
 type CommitStatus struct {
-	CommitID       string `json:"commitID"`
-	CommitImageRef string `json:"commitImageRef"`
+	CommitID string `json:"commitID"`
 }
 
 // DevboxStatus defines the observed state of Devbox

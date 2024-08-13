@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"time"
 )
 
 const (
@@ -40,6 +41,9 @@ const (
 	DevBoxPartOf = "devbox"
 )
 
+const (
+	Devbox = "devbox"
+)
 const (
 	rate = 10
 )
@@ -101,6 +105,14 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
+	currentTime := time.Now()
+	formattedTime := currentTime.Format(time.RFC3339)
+
+	devbox.Status.Commit.CommitID = formattedTime
+	if err := r.Update(ctx, devbox); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if err := r.syncService(ctx, devbox, recLabels); err != nil {
 		logger.Error(err, "create service failed")
 		r.recorder.Eventf(devbox, corev1.EventTypeWarning, "Create service failed", "%v", err)
@@ -128,7 +140,11 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			ContainerPort: 2222,
 		},
 	}
-	var envs []corev1.EnvVar
+
+	envs := []corev1.EnvVar{
+		{Name: "POD_TYPE", Value: Devbox},
+		{Name: "VERSION", Value: devbox.Status.Commit.CommitID},
+	}
 
 	cpuRequest := devbox.Spec.Resource["cpu"]
 	memoryRequest := devbox.Spec.Resource["memory"]
@@ -139,10 +155,13 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	memoryLimit := memoryRequest.DeepCopy()
 	memoryLimit.Set(memoryRequest.Value() * rate)
 
+	//get image name
+	imageName, err := r.GetImageName(ctx, devbox)
+
 	containers := []corev1.Container{
 		{
 			Name:  devbox.ObjectMeta.Name,
-			Image: devbox.ObjectMeta.Name,
+			Image: imageName,
 			Ports: ports,
 			Env:   envs,
 			Resources: corev1.ResourceRequirements{
@@ -168,7 +187,7 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 		ObjectMeta: objectMeta,
 	}
 
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, pod, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, pod, func() error {
 		// only update some specific fields
 		pod.Spec.Containers = expectPod.Spec.Containers
 		return controllerutil.SetControllerReference(devbox, pod, r.Scheme)
@@ -178,6 +197,15 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	}
 
 	return nil
+}
+
+func (r *DevboxReconciler) GetImageName(ctx context.Context, devbox *devboxv1alpha1.Devbox) (string, error) {
+	var err error
+	if len(devbox.Status.Commit.CommitID) == 0 {
+		return devbox.Spec.RuntimeRef.Name, err
+	} else {
+		return devbox.Status.Commit.CommitID, err
+	}
 }
 
 func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alpha1.Devbox, recLabels map[string]string) error {
