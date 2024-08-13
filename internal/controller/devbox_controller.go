@@ -134,10 +134,10 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	memoryRequest := devbox.Spec.Resource["memory"]
 
 	cpuLimit := cpuRequest.DeepCopy()
-	cpuLimit.Set(cpuRequest.Value() / rate)
+	cpuLimit.Set(cpuRequest.Value() * rate)
 
 	memoryLimit := memoryRequest.DeepCopy()
-	memoryLimit.Set(memoryRequest.Value() / rate)
+	memoryLimit.Set(memoryRequest.Value() * rate)
 
 	containers := []corev1.Container{
 		{

@@ -20,19 +20,17 @@ import (
 	"context"
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // DevBoxReleaseReconciler reconciles a DevBoxRelease object
 type DevBoxReleaseReconciler struct {
-	Client client.Client
+	client.Client
 	Scheme *runtime.Scheme
 }
 
@@ -51,24 +49,6 @@ type DevBoxReleaseReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
-
-	// 获取 Pod 资源
-	pod := &corev1.Pod{}
-	err := r.Client.Get(ctx, req.NamespacedName, pod)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Pod 不存在，可以选择创建一个新的 Pod
-			newPod := r.newPod(req.NamespacedName.Name, "name")
-			err = r.Client.Create(ctx, newPod)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-			// Pod 创建成功，可以返回
-			return reconcile.Result{}, nil
-		}
-		return reconcile.Result{}, err
-	}
-
 	return ctrl.Result{}, nil
 }
 
