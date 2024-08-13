@@ -24,8 +24,6 @@ resources:
 # if you do not want those helpers be installed with your Project.
 - operationrequest_editor_role.yaml
 - operationrequest_viewer_role.yaml
-- devboxrelease1_editor_role.yaml
-- devboxrelease1_viewer_role.yaml
 - devboxrelease_editor_role.yaml
 - devboxrelease_viewer_role.yaml
 - runtimeclass_editor_role.yaml

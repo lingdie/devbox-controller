@@ -19,12 +19,10 @@ package controller
 import (
 	"context"
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -49,30 +47,28 @@ type DevBoxReleaseReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
-	return ctrl.Result{}, nil
-}
 
-func (r *DevBoxReleaseReconciler) newPod(namespace, name string) *corev1.Pod {
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "mycontainer",
-					Image: "busybox:latest",
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("100Mi"),
-						},
-					},
-				},
-			},
-		},
+	devboxRelease := &devboxv1alpha1.DevBoxRelease{}
+	if err := r.Client.Get(ctx, req.NamespacedName, devboxRelease); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	if devboxRelease.ObjectMeta.DeletionTimestamp.IsZero() {
+		if controllerutil.AddFinalizer(devboxRelease, FinalizerName) {
+			if err := r.Update(ctx, devboxRelease); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		if controllerutil.RemoveFinalizer(devboxRelease, FinalizerName) {
+			if err := r.Update(ctx, devboxRelease); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
