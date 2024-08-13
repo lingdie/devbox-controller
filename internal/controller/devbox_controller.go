@@ -22,11 +22,9 @@ import (
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"github.com/labring/sealos/controllers/devbox/label"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,11 +37,11 @@ const (
 )
 
 const (
-	CPULimit    = "0.3"
-	MemoryLimit = "256Mi"
-)
-const (
 	DevBoxPartOf = "devbox"
+)
+
+const (
+	rate = 10
 )
 
 // DevboxReconciler reconciles a Devbox object
@@ -91,13 +89,6 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	if devbox.Status.Network.ServiceName == "" {
-		devbox.Status.Network.ServiceName = devbox.Name + "-svc" + rand.String(5)
-		if err := r.Status().Update(ctx, devbox); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
 	recLabels := label.RecommendedLabels(&label.Recommended{
 		Name:      devbox.Name,
 		ManagedBy: label.DefaultManagedBy,
@@ -138,6 +129,16 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 		},
 	}
 	var envs []corev1.EnvVar
+
+	cpuRequest := devbox.Spec.Resource["cpu"]
+	memoryRequest := devbox.Spec.Resource["memory"]
+
+	cpuLimit := cpuRequest.DeepCopy()
+	cpuLimit.Set(cpuRequest.Value() / rate)
+
+	memoryLimit := memoryRequest.DeepCopy()
+	memoryLimit.Set(memoryRequest.Value() / rate)
+
 	containers := []corev1.Container{
 		{
 			Name:  devbox.ObjectMeta.Name,
@@ -146,12 +147,12 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			Env:   envs,
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					"cpu":    devbox.Spec.Resource["cpu"],
-					"memory": devbox.Spec.Resource["memory"],
+					"cpu":    cpuRequest,
+					"memory": memoryRequest,
 				},
 				Limits: corev1.ResourceList{
-					"cpu":    resource.MustParse(CPULimit),
-					"memory": resource.MustParse(MemoryLimit),
+					"cpu":    cpuLimit,
+					"memory": memoryLimit,
 				},
 			},
 		},
@@ -192,6 +193,13 @@ func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alph
 				//NodePort:   30000,
 			},
 		},
+	}
+
+	if devbox.Status.Network.ServiceName == "" {
+		devbox.Status.Network.ServiceName = devbox.Name + "-svc"
+		if err := r.Status().Update(ctx, devbox); err != nil {
+			return err
+		}
 	}
 
 	service := &corev1.Service{
@@ -249,5 +257,6 @@ func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alph
 func (r *DevboxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&devboxv1alpha1.Devbox{}).
+		Owns(&corev1.Pod{}).Owns(&corev1.Service{}).
 		Complete(r)
 }
