@@ -5,6 +5,8 @@ resources:
 - bases/devbox.sealos.io_devboxes.yaml
 - bases/devbox.sealos.io_runtimes.yaml
 - bases/devbox.sealos.io_runtimeclasses.yaml
+- bases/devbox.sealos.io_devboxreleases.yaml
+- bases/devbox.sealos.io_operationrequests.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
@@ -17,6 +19,8 @@ patches:
 #- path: patches/cainjection_in_devboxes.yaml
 #- path: patches/cainjection_in_runtimes.yaml
 #- path: patches/cainjection_in_runtimeclasses.yaml
+#- path: patches/cainjection_in_devboxreleases.yaml
+#- path: patches/cainjection_in_operationrequests.yaml
 # +kubebuilder:scaffold:crdkustomizecainjectionpatch
 
 # [WEBHOOK] To enable webhook, uncomment the following section

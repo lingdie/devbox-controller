@@ -87,6 +87,8 @@ spec:
                   nodePort:
                     format: int32
                     type: integer
+                  serviceName:
+                    type: string
                   tailnet:
                     description: todo TailNet
                     type: string
@@ -97,6 +99,7 @@ spec:
                     type: string
                 required:
                 - nodePort
+                - serviceName
                 - tailnet
                 - type
                 type: object
