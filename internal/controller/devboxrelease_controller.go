@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/tag"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,8 +30,15 @@ import (
 // DevBoxReleaseReconciler reconciles a DevBoxRelease object
 type DevBoxReleaseReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	tagClient tag.ReleaseTagClient
+	Scheme    *runtime.Scheme
 }
+
+const (
+	DevboxReleaseTagged    = "Tagged"
+	DevboxReleaseNotTagged = "NotTagged"
+	DevboxReleaseFailed    = "Failed"
+)
 
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxreleases,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxreleases/status,verbs=get;update;patch
@@ -68,6 +76,29 @@ func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
+	if len(devboxRelease.Status.Phase) == 0 {
+		devboxRelease.Status.Phase = DevboxReleaseNotTagged
+		err := r.Update(ctx, devboxRelease)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	if devboxRelease.Status.Phase == DevboxReleaseNotTagged {
+		username := devboxRelease.Spec.UserInfo.Username
+		password := devboxRelease.Spec.UserInfo.Password
+		repositoryName := devboxRelease.Spec.RepositoryInfo.Name
+		imageName := devboxRelease.Spec.RepositoryInfo.Image
+		oldTag := devboxRelease.Spec.RepositoryInfo.OldTag
+		newTag := devboxRelease.Spec.RepositoryInfo.NewTag
+		err := r.tagClient.TagImage(username, password, repositoryName, imageName, oldTag, newTag)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		err = r.Update(ctx, devboxRelease)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 	return ctrl.Result{}, nil
 }
 
