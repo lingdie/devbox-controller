@@ -161,9 +161,9 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	memoryLimit := devbox.Spec.Resource["memory"]
 
 	cpuRequest := cpuLimit.DeepCopy()
-	cpuRequest.Set(cpuRequest.Value() / rate)
+	cpuRequest.Set(int64(cpuRequest.AsApproximateFloat64() / rate))
 	memoryRequest := memoryLimit.DeepCopy()
-	memoryRequest.Set(memoryRequest.Value() / rate)
+	memoryRequest.Set(int64(memoryRequest.AsApproximateFloat64() / rate))
 
 	//get image name
 	imageName, err := r.getImageName(ctx, devbox)
@@ -198,6 +198,10 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	if err = r.Create(ctx, expectPod); err != nil {
 		return err
 	}
+	if err = controllerutil.SetControllerReference(devbox, expectPod, r.Scheme); err != nil {
+		return err
+	}
+
 	// todo add check commit status...
 	// update the last commit history status to success
 	if len(devbox.Status.CommitHistory) != 0 {
