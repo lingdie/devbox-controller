@@ -145,8 +145,10 @@ func main() {
 	}
 
 	if err = (&controller.DevboxReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		CommitImageRegistry: "docker.io",
+		Recorder:            mgr.GetEventRecorderFor("devbox-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Devbox")
 		os.Exit(1)

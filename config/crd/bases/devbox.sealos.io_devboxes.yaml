@@ -64,51 +64,53 @@ spec:
                 required:
                 - name
                 type: object
+              state:
+                enum:
+                - Running
+                - Stopped
+                type: string
             required:
             - network
             - resource
             - runtimeRef
+            - state
             type: object
           status:
             description: DevboxStatus defines the observed state of Devbox
             properties:
-              commit:
-                properties:
-                  commitID:
-                    type: string
-                  commitImageRef:
-                    type: string
-                required:
-                - commitID
-                - commitImageRef
-                type: object
+              commitHistory:
+                items:
+                  properties:
+                    image:
+                      type: string
+                    status:
+                      type: string
+                    time:
+                      format: date-time
+                      type: string
+                  required:
+                  - image
+                  - status
+                  - time
+                  type: object
+                type: array
               network:
                 properties:
                   nodePort:
                     format: int32
                     type: integer
-                  serviceName:
-                    type: string
                   tailnet:
                     description: todo TailNet
                     type: string
                   type:
+                    default: NodePort
                     enum:
                     - NodePort
                     - Tailnet
                     type: string
                 required:
-                - nodePort
-                - serviceName
-                - tailnet
                 - type
                 type: object
-              phase:
-                type: string
-            required:
-            - commit
-            - network
-            - phase
             type: object
         type: object
     served: true

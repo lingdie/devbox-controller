@@ -39,10 +39,16 @@ spec:
           spec:
             description: RuntimeSpec defines the desired state of Runtime
             properties:
-              foo:
-                description: Foo is an example field of Runtime. Edit runtime_types.go
-                  to remove/update
+              classRef:
                 type: string
+              description:
+                type: string
+              image:
+                type: string
+            required:
+            - classRef
+            - description
+            - image
             type: object
           status:
             description: RuntimeStatus defines the observed state of Runtime
