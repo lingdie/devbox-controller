@@ -7,5 +7,5 @@ metadata:
   name: runtime-sample
 spec:
   classRef: runtimeclass-sample
-  image: "docker.io/lingdie/test:dev"
+  image: "nginx"
   description: "test runtime"

@@ -105,6 +105,8 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.Devbox, recLabels map[string]string) error {
+	logger := log.FromContext(ctx, "devbox", devbox.Name, "namespace", devbox.Namespace)
+
 	objectMeta := metav1.ObjectMeta{
 		Name:      devbox.Name,
 		Namespace: devbox.Namespace,
@@ -113,9 +115,10 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	devboxPod := &corev1.Pod{
 		ObjectMeta: objectMeta,
 	}
-
-	if err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Name}, devboxPod); err != nil && client.IgnoreNotFound(err) != nil {
+	err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Name}, devboxPod)
+	if err != nil && client.IgnoreNotFound(err) != nil {
 		// error other than not found
+		logger.Error(err, "get devbox pod failed")
 		return err
 	} else if err != nil && client.IgnoreNotFound(err) == nil {
 		// no devbox pod found, create a new one, do nothing here
@@ -160,14 +163,14 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	cpuLimit := devbox.Spec.Resource["cpu"]
 	memoryLimit := devbox.Spec.Resource["memory"]
 
+	// todo calculate resource request based on limit / 10
 	cpuRequest := cpuLimit.DeepCopy()
-	cpuRequest.Set(int64(cpuRequest.AsApproximateFloat64() / rate))
 	memoryRequest := memoryLimit.DeepCopy()
-	memoryRequest.Set(int64(memoryRequest.AsApproximateFloat64() / rate))
 
 	//get image name
 	imageName, err := r.getImageName(ctx, devbox)
 	if err != nil {
+		logger.Error(err, "get image name failed")
 		return err
 	}
 	containers := []corev1.Container{
@@ -195,10 +198,11 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			Containers:    containers,
 		},
 	}
-	if err = r.Create(ctx, expectPod); err != nil {
+	if err = controllerutil.SetControllerReference(devbox, expectPod, r.Scheme); err != nil {
 		return err
 	}
-	if err = controllerutil.SetControllerReference(devbox, expectPod, r.Scheme); err != nil {
+	if err = r.Create(ctx, expectPod); err != nil {
+		logger.Error(err, "create pod failed")
 		return err
 	}
 
