@@ -22,6 +22,7 @@ import (
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"github.com/labring/sealos/controllers/devbox/label"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -159,14 +160,6 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 		},
 	}
 
-	// get resource limit and request
-	cpuLimit := devbox.Spec.Resource["cpu"]
-	memoryLimit := devbox.Spec.Resource["memory"]
-
-	// todo calculate resource request based on limit / 10
-	cpuRequest := cpuLimit.DeepCopy()
-	memoryRequest := memoryLimit.DeepCopy()
-
 	//get image name
 	imageName, err := r.getImageName(ctx, devbox)
 	if err != nil {
@@ -180,13 +173,15 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			Ports: ports,
 			Env:   envs,
 			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					"cpu":    cpuRequest,
-					"memory": memoryRequest,
-				},
+				Requests: calculateResourceRequest(
+					corev1.ResourceList{
+						corev1.ResourceCPU:    devbox.Spec.Resource["cpu"],
+						corev1.ResourceMemory: devbox.Spec.Resource["memory"],
+					},
+				),
 				Limits: corev1.ResourceList{
-					"cpu":    cpuLimit,
-					"memory": memoryLimit,
+					"cpu":    devbox.Spec.Resource["cpu"],
+					"memory": devbox.Spec.Resource["memory"],
 				},
 			},
 		},
@@ -298,6 +293,26 @@ func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alph
 func (r *DevboxReconciler) generateImageName(devbox *devboxv1alpha1.Devbox) string {
 	now := time.Now()
 	return fmt.Sprintf("%s/%s/%s:%s", r.CommitImageRegistry, devbox.Namespace, devbox.Name, now.Format("2006-01-02-150405"))
+}
+
+func calculateResourceRequest(limit corev1.ResourceList) corev1.ResourceList {
+	if limit == nil {
+		return nil
+	}
+	request := make(corev1.ResourceList)
+	// Calculate CPU request
+	if cpu, ok := limit[corev1.ResourceCPU]; ok {
+		cpuValue := cpu.AsApproximateFloat64()
+		cpuRequest := cpuValue / rate
+		request[corev1.ResourceCPU] = *resource.NewMilliQuantity(int64(cpuRequest*1000), resource.DecimalSI)
+	}
+	// Calculate memory request
+	if memory, ok := limit[corev1.ResourceMemory]; ok {
+		memoryValue := memory.AsApproximateFloat64()
+		memoryRequest := memoryValue / rate
+		request[corev1.ResourceMemory] = *resource.NewQuantity(int64(memoryRequest), resource.BinarySI)
+	}
+	return request
 }
 
 // SetupWithManager sets up the controller with the Manager.
