@@ -46,13 +46,6 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
-var (
-	TagClient = &dockerhub.DockerhubClient{
-		AuthPath:     "https://auth.docker.io/token?service=registry.docker.io&scope=repository:",
-		RegistryPath: "https://index.docker.io/v2/",
-	}
-)
-
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
@@ -70,12 +63,11 @@ func main() {
 	var registryAddr string
 	var registryUser string
 	var registryPassword string
-	var username string
-	var password string
-	var repository string
+	var authAddr string
 	flag.StringVar(&registryAddr, "registry-addr", "sealos.hub:5000", "The address of the registry")
 	flag.StringVar(&registryUser, "registry-user", "admin", "The user of the registry")
 	flag.StringVar(&registryPassword, "registry-password", "admin", "The password of the registry")
+	flag.StringVar(&authAddr, "auth-addr", "sealos.hub:5000", "The address of the auth")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -86,9 +78,6 @@ func main() {
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&username, "username", "mlhiter", "The username used to authenticate to the registry")
-	flag.StringVar(&password, "password", "9wv4sWHL!t8GFmD", "The password used to authenticate to the registry")
-	flag.StringVar(&repository, "repository", "mlhiter", "The repository used to register the image")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -175,12 +164,16 @@ func main() {
 	}
 
 	if err = (&controller.DevBoxReleaseReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		TagClient:      TagClient,
-		Username:       username,
-		Password:       password,
-		RepositoryName: repository,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		TagClient: &dockerhub.DockerhubClient{
+			AuthPath:     authAddr,
+			RegistryPath: registryAddr,
+		},
+		Username: registryUser,
+		Password: registryPassword,
+		// The repository is the same as the username
+		RepositoryName: registryUser,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DevBoxRelease")
 		os.Exit(1)

@@ -134,11 +134,7 @@ func (r *DevBoxReleaseReconciler) CreateReleaseTag(ctx context.Context, devboxRe
 	if err != nil {
 		return err
 	}
-	newTag := devboxRelease.Spec.NewTag
-	username := r.Username
-	password := r.Password
-	repositoryName := r.RepositoryName
-	err = r.TagClient.TagImage(username, password, repositoryName, imageName, oldTag, newTag)
+	err = r.TagClient.TagImage(r.Username, r.Password, r.RepositoryName, imageName, oldTag, devboxRelease.Spec.NewTag)
 	if err != nil {
 		return err
 	}
@@ -157,8 +153,20 @@ func (r *DevBoxReleaseReconciler) GetImageAndTag(devbox *devboxv1alpha1.Devbox) 
 	} else {
 		path = devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Image
 	}
+
 	parts := strings.Split(path, "/")
-	return parts[1], parts[2], nil
+	var tag string
+	var image string
+	if len(parts) > 2 {
+		fullTag := strings.Split(parts[2], ":")
+		if len(fullTag) == 2 {
+			tag = fullTag[1]
+		}
+		image = parts[1] + "/" + fullTag[0]
+		return image, tag, nil
+	} else {
+		return "", "", fmt.Errorf("commit history is error")
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
