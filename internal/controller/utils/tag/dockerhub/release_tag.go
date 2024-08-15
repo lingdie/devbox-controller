@@ -10,29 +10,32 @@ import (
 )
 
 type DockerhubClient struct {
-	authPath     string
-	registryPath string
+	AuthPath     string
+	RegistryPath string
 }
 
 func (t *DockerhubClient) TagImage(username string, password string, repositoryName string, imageName string, oldTag string, newTag string) error {
-	token, err := t.login(t.authPath, username, password, repositoryName)
+	fmt.Println("controller已经成功进入啦！tagimage")
+	token, err := t.login(t.AuthPath, username, password, repositoryName, imageName)
 	if err != nil {
 		return err
 	}
-	manifest, err := t.pullManifest(t.registryPath, token, repositoryName, imageName, oldTag)
+	fmt.Println("token: %s\n", token)
+	manifest, err := t.pullManifest(t.RegistryPath, token, repositoryName, imageName, oldTag)
 	if err != nil {
 		return err
 	}
-	if err := t.pushManifest(t.registryPath, token, repositoryName, imageName, newTag, manifest); err != nil {
+	fmt.Println("manifest: %s\n", string(manifest))
+	if err := t.pushManifest(t.RegistryPath, token, repositoryName, imageName, newTag, manifest); err != nil {
 		fmt.Println(err)
 	}
 	return nil
 }
 
-func (t *DockerhubClient) login(authPath string, username string, password string, repositoryName string) (string, error) {
+func (t *DockerhubClient) login(authPath string, username string, password string, repositoryName string, image string) (string, error) {
 	var (
 		client = http.DefaultClient
-		url    = authPath + repositoryName + ":pull,push"
+		url    = authPath + repositoryName + "/" + image + ":pull,push"
 	)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -40,7 +43,7 @@ func (t *DockerhubClient) login(authPath string, username string, password strin
 		return "", err
 	}
 
-	//req.SetBasicAuth(username, password)
+	req.SetBasicAuth(username, password)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -73,9 +76,9 @@ func (t *DockerhubClient) login(authPath string, username string, password strin
 func (t *DockerhubClient) pullManifest(registryPath string, token string, repository string, imageName string, tag string) ([]byte, error) {
 	var (
 		client = http.DefaultClient
-		url    = registryPath + repository + imageName + "/manifests/" + tag
+		url    = registryPath + repository + "/" + imageName + "/manifests/" + tag
 	)
-
+	fmt.Println(url)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -104,7 +107,7 @@ func (t *DockerhubClient) pullManifest(registryPath string, token string, reposi
 func (t *DockerhubClient) pushManifest(registryPath string, token string, repository string, imageName string, tag string, manifest []byte) error {
 	var (
 		client = http.DefaultClient
-		url    = registryPath + repository + imageName + "/manifests/" + tag
+		url    = registryPath + repository + "/" + imageName + "/manifests/" + tag
 	)
 
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(manifest))

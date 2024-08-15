@@ -26,21 +26,9 @@ import (
 // DevBoxReleaseSpec defines the desired state of DevBoxRelease
 type DevBoxReleaseSpec struct {
 	// +kubebuilder:validation:Required
-	UserInfo       UserInfo       `json:"userInfo,omitempty"`
-	RepositoryInfo RepositoryInfo `json:"repositoryInfo,omitempty"`
-	Notes          string         `json:"notes,omitempty"`
-}
-
-type UserInfo struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type RepositoryInfo struct {
-	Name   string `json:"name"`
-	Image  string `json:"image"`
-	OldTag string `json:"oldTag,omitempty"`
-	NewTag string `json:"newTag,omitempty"`
+	DevboxName string `json:"devboxName"`
+	NewTag     string `json:"newTag,omitempty"`
+	Notes      string `json:"notes,omitempty"`
 }
 
 type DevboxReleasePhase string

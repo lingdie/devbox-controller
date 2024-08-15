@@ -76,11 +76,8 @@ spec:
                 properties:
                   commitID:
                     type: string
-                  commitImageRef:
-                    type: string
                 required:
                 - commitID
-                - commitImageRef
                 type: object
               network:
                 properties:
