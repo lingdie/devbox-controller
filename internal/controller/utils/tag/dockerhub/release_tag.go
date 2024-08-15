@@ -15,17 +15,14 @@ type DockerhubClient struct {
 }
 
 func (t *DockerhubClient) TagImage(username string, password string, repositoryName string, imageName string, oldTag string, newTag string) error {
-	fmt.Println("controller已经成功进入啦！tagimage")
 	token, err := t.login(t.AuthPath, username, password, repositoryName, imageName)
 	if err != nil {
 		return err
 	}
-	fmt.Println("token: %s\n", token)
 	manifest, err := t.pullManifest(t.RegistryPath, token, repositoryName, imageName, oldTag)
 	if err != nil {
 		return err
 	}
-	fmt.Println("manifest: %s\n", string(manifest))
 	if err := t.pushManifest(t.RegistryPath, token, repositoryName, imageName, newTag, manifest); err != nil {
 		fmt.Println(err)
 	}
