@@ -39,18 +39,22 @@ spec:
           spec:
             description: DevBoxReleaseSpec defines the desired state of DevBoxRelease
             properties:
-              createTime:
-                format: date-time
+              devboxName:
+                type: string
+              newTag:
                 type: string
               notes:
                 type: string
-              version:
-                type: string
             required:
-            - version
+            - devboxName
             type: object
           status:
             description: DevBoxReleaseStatus defines the observed state of DevBoxRelease
+            properties:
+              phase:
+                type: string
+            required:
+            - phase
             type: object
         type: object
     served: true

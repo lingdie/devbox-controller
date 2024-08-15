@@ -26,15 +26,25 @@ import (
 // DevBoxReleaseSpec defines the desired state of DevBoxRelease
 type DevBoxReleaseSpec struct {
 	// +kubebuilder:validation:Required
-	Version    string      `json:"version"`
-	Notes      string      `json:"notes,omitempty"`
-	CreateTime metav1.Time `json:"createTime,omitempty"`
+	DevboxName string `json:"devboxName"`
+	NewTag     string `json:"newTag,omitempty"`
+	Notes      string `json:"notes,omitempty"`
 }
+
+type DevboxReleasePhase string
+
+const (
+	// DevboxReleasePhaseTagged means the Devbox has been tagged
+	DevboxReleasePhaseTagged DevboxReleasePhase = "Tagged"
+	// DevboxReleasePhaseNotTagged means the Devbox has not been tagged
+	DevboxReleasePhaseNotTagged DevboxReleasePhase = "NotTagged"
+	// DevboxReleasePhaseFailed means the Devbox has not been tagged
+	DevboxReleasePhaseFailed DevboxReleasePhase = "Failed"
+)
 
 // DevBoxReleaseStatus defines the observed state of DevBoxRelease
 type DevBoxReleaseStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Phase DevboxReleasePhase `json:"phase"`
 }
 
 // +kubebuilder:object:root=true

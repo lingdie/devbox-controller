@@ -19,7 +19,9 @@ package controller
 import (
 	"context"
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/tag"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -29,8 +31,15 @@ import (
 // DevBoxReleaseReconciler reconciles a DevBoxRelease object
 type DevBoxReleaseReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	TagClient tag.ReleaseTagClient
+	Scheme    *runtime.Scheme
 }
+
+const (
+	DevboxReleaseTagged    = "Tagged"
+	DevboxReleaseNotTagged = "NotTagged"
+	DevboxReleaseFailed    = "Failed"
+)
 
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxreleases,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxreleases/status,verbs=get;update;patch
@@ -47,7 +56,6 @@ type DevBoxReleaseReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
-
 	devboxRelease := &devboxv1alpha1.DevBoxRelease{}
 	if err := r.Client.Get(ctx, req.NamespacedName, devboxRelease); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -68,6 +76,37 @@ func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
+	if len(devboxRelease.Status.Phase) == 0 {
+		devboxRelease.Status.Phase = DevboxReleaseNotTagged
+		err := r.Update(ctx, devboxRelease)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		username := "mlhiter"
+		password := "9wv4sWHL!t8GFmD"
+		repositoryName := "mlhiter"
+		devbox := &devboxv1alpha1.Devbox{}
+		devboxInfo := types.NamespacedName{
+			Name:      devboxRelease.Spec.DevboxName,
+			Namespace: devboxRelease.Namespace,
+		}
+		if err := r.Get(ctx, devboxInfo, devbox); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+
+		//imageName := devbox.Status.Commit.CommitID
+		//oldTag := devboxRelease.Spec.OldTag
+
+		newTag := devboxRelease.Spec.NewTag
+		err = r.TagClient.TagImage(username, password, repositoryName, imageName, oldTag, newTag)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		err = r.Update(ctx, devboxRelease)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 	return ctrl.Result{}, nil
 }
 

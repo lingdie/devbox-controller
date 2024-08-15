@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/tag/dockerhub"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -43,6 +44,13 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+)
+
+var (
+	TagClient = &dockerhub.DockerhubClient{
+		AuthPath:     "https://auth.docker.io/token?service=registry.docker.io&scope=repository:",
+		RegistryPath: "https://index.docker.io/v2/",
+	}
 )
 
 func init() {
@@ -160,8 +168,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.DevBoxReleaseReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		TagClient: TagClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DevBoxRelease")
 		os.Exit(1)
