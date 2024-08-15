@@ -70,6 +70,9 @@ func main() {
 	var registryAddr string
 	var registryUser string
 	var registryPassword string
+	var username string
+	var password string
+	var repository string
 	flag.StringVar(&registryAddr, "registry-addr", "sealos.hub:5000", "The address of the registry")
 	flag.StringVar(&registryUser, "registry-user", "admin", "The user of the registry")
 	flag.StringVar(&registryPassword, "registry-password", "admin", "The password of the registry")
@@ -83,6 +86,9 @@ func main() {
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.StringVar(&username, "username", "mlhiter", "The username used to authenticate to the registry")
+	flag.StringVar(&password, "password", "9wv4sWHL!t8GFmD", "The password used to authenticate to the registry")
+	flag.StringVar(&repository, "repository", "mlhiter", "The repository used to register the image")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -167,10 +173,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Devbox")
 		os.Exit(1)
 	}
+
 	if err = (&controller.DevBoxReleaseReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		TagClient: TagClient,
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		TagClient:      TagClient,
+		Username:       username,
+		Password:       password,
+		RepositoryName: repository,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DevBoxRelease")
 		os.Exit(1)

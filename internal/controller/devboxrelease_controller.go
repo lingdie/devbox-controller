@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/tag"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,13 +27,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"strings"
 )
 
 // DevBoxReleaseReconciler reconciles a DevBoxRelease object
 type DevBoxReleaseReconciler struct {
 	client.Client
-	TagClient tag.ReleaseTagClient
-	Scheme    *runtime.Scheme
+	TagClient      tag.ReleaseTagClient
+	Scheme         *runtime.Scheme
+	Username       string
+	Password       string
+	RepositoryName string
 }
 
 const (
@@ -68,9 +73,15 @@ func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 		}
 	} else {
-		if controllerutil.RemoveFinalizer(devboxRelease, FinalizerName) {
-			if err := r.Update(ctx, devboxRelease); err != nil {
+		if controllerutil.ContainsFinalizer(devboxRelease, FinalizerName) {
+			err := r.DeleteReleaseTag(ctx, devboxRelease)
+			if err != nil {
 				return ctrl.Result{}, err
+			}
+			if controllerutil.RemoveFinalizer(devboxRelease, FinalizerName) {
+				if err := r.Update(ctx, devboxRelease); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 		}
 		return ctrl.Result{}, nil
@@ -78,36 +89,76 @@ func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if len(devboxRelease.Status.Phase) == 0 {
 		devboxRelease.Status.Phase = DevboxReleaseNotTagged
-		err := r.Update(ctx, devboxRelease)
+		err := r.CreateReleaseTag(ctx, devboxRelease)
 		if err != nil {
 			return ctrl.Result{}, err
-		}
-		username := "mlhiter"
-		password := "9wv4sWHL!t8GFmD"
-		repositoryName := "mlhiter"
-		devbox := &devboxv1alpha1.Devbox{}
-		devboxInfo := types.NamespacedName{
-			Name:      devboxRelease.Spec.DevboxName,
-			Namespace: devboxRelease.Namespace,
-		}
-		if err := r.Get(ctx, devboxInfo, devbox); err != nil {
-			return ctrl.Result{}, client.IgnoreNotFound(err)
-		}
-
-		//imageName := devbox.Status.Commit.CommitID
-		//oldTag := devboxRelease.Spec.OldTag
-
-		newTag := devboxRelease.Spec.NewTag
-		err = r.TagClient.TagImage(username, password, repositoryName, imageName, oldTag, newTag)
-		if err != nil {
-			return ctrl.Result{}, err
+		} else {
+			devboxRelease.Status.Phase = DevboxReleaseTagged
 		}
 		err = r.Update(ctx, devboxRelease)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 	}
+
+	if devboxRelease.Status.Phase == DevboxReleaseNotTagged {
+		err := r.CreateReleaseTag(ctx, devboxRelease)
+		if err != nil {
+			return ctrl.Result{}, err
+		} else {
+			devboxRelease.Status.Phase = DevboxReleaseTagged
+		}
+		err = r.Update(ctx, devboxRelease)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	if devboxRelease.Status.Phase == DevboxReleaseTagged {
+		return ctrl.Result{}, nil
+	}
+
 	return ctrl.Result{}, nil
+}
+
+func (r *DevBoxReleaseReconciler) CreateReleaseTag(ctx context.Context, devboxRelease *devboxv1alpha1.DevBoxRelease) error {
+	devbox := &devboxv1alpha1.Devbox{}
+	devboxInfo := types.NamespacedName{
+		Name:      devboxRelease.Spec.DevboxName,
+		Namespace: devboxRelease.Namespace,
+	}
+	if err := r.Get(ctx, devboxInfo, devbox); err != nil {
+		return err
+	}
+	imageName, oldTag, err := r.GetImageAndTag(devbox)
+	if err != nil {
+		return err
+	}
+	newTag := devboxRelease.Spec.NewTag
+	username := r.Username
+	password := r.Password
+	repositoryName := r.RepositoryName
+	err = r.TagClient.TagImage(username, password, repositoryName, imageName, oldTag, newTag)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *DevBoxReleaseReconciler) DeleteReleaseTag(ctx context.Context, devboxRelease *devboxv1alpha1.DevBoxRelease) error {
+	//todo only delete CR without doing any other operations
+	return nil
+}
+
+func (r *DevBoxReleaseReconciler) GetImageAndTag(devbox *devboxv1alpha1.Devbox) (string, string, error) {
+	var path string
+	if len(devbox.Status.CommitHistory) == 0 {
+		return "", "", fmt.Errorf("commit history is empty")
+	} else {
+		path = devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Image
+	}
+	parts := strings.Split(path, "/")
+	return parts[1], parts[2], nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
