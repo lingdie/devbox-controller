@@ -30,6 +30,22 @@ const (
 	ResourceMemory ResourceName = "memory"
 )
 
+type DevboxState string
+
+const (
+	// DevboxStateRunning means the Devbox is running
+	DevboxStateRunning DevboxState = "Running"
+	// DevboxStateStopped means the Devbox is stopped
+	DevboxStateStopped DevboxState = "Stopped"
+)
+
+type NetworkType string
+
+const (
+	NetworkTypeNodePort NetworkType = "NodePort"
+	NetworkTypeTailnet  NetworkType = "Tailnet"
+)
+
 type ResourceList map[ResourceName]resource.Quantity
 
 type RuntimeRef struct {
@@ -46,6 +62,9 @@ type NetworkSpec struct {
 // DevboxSpec defines the desired state of Devbox
 type DevboxSpec struct {
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=Running;Stopped
+	State DevboxState `json:"state"`
+	// +kubebuilder:validation:Required
 	Resource ResourceList `json:"resource"`
 	// +kubebuilder:validation:Required
 	RuntimeRef RuntimeRef `json:"runtimeRef"`
@@ -53,47 +72,40 @@ type DevboxSpec struct {
 	NetworkSpec NetworkSpec `json:"network"`
 }
 
-type DevboxPhase string
-
-const (
-	// DevboxPhasePending means the Devbox is pending
-	DevboxPhasePending DevboxPhase = "Pending"
-	// DevboxPhaseRunning means the Devbox is running
-	DevboxPhaseRunning DevboxPhase = "Running"
-	// DevboxPhaseStopped means the Devbox is stopped
-	DevboxPhaseStopped DevboxPhase = "Stopped"
-	// DevboxPhaseFailed means the Devbox has failed
-	DevboxPhaseFailed DevboxPhase = "Failed"
-	// DevboxPhaseUnknown means the Devbox is in an unknown state
-	DevboxPhaseUnknown DevboxPhase = "Unknown"
-)
-
-type NetworkType string
-
-const (
-	NetworkTypeNodePort NetworkType = "NodePort"
-	NetworkTypeTailnet  NetworkType = "Tailnet"
-)
-
 type NetworkStatus struct {
-	// +kubebuilder:validation:Required
+	// +kubebuilder:default=NodePort
 	// +kubebuilder:validation:Enum=NodePort;Tailnet
-	Type        NetworkType `json:"type"`
-	NodePort    int32       `json:"nodePort"`
-	ServiceName string      `json:"serviceName"`
+	Type NetworkType `json:"type"`
+
+	// +kubebuilder:validation:Optional
+	NodePort int32 `json:"nodePort"`
+
 	// todo TailNet
+	// +kubebuilder:validation:Optional
 	TailNet string `json:"tailnet"`
 }
 
-type CommitStatus struct {
-	CommitID string `json:"commitID"`
+type CommitStatus string
+
+const (
+	CommitStatusSuccess CommitStatus = "Success"
+	CommitStatusFailed  CommitStatus = "Failed"
+	CommitStatusUnknown CommitStatus = "Unknown"
+	CommitStatusPending CommitStatus = "Pending"
+)
+
+type CommitHistory struct {
+	Image  string       `json:"image"`
+	Time   metav1.Time  `json:"time"`
+	Status CommitStatus `json:"status"`
 }
 
 // DevboxStatus defines the observed state of Devbox
 type DevboxStatus struct {
-	Phase   DevboxPhase   `json:"phase"`
+	// +kubebuilder:validation:Optional
 	Network NetworkStatus `json:"network"`
-	Commit  CommitStatus  `json:"commit"`
+	// +kubebuilder:validation:Optional
+	CommitHistory []CommitHistory `json:"commitHistory"`
 }
 
 // +kubebuilder:object:root=true

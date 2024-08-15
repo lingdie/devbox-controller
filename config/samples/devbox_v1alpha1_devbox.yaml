@@ -6,4 +6,11 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: devbox-sample
 spec:
-  # TODO(user): Add fields here
+  state: Running
+  resource:
+    cpu: 2
+    memory: 4Gi
+  runtimeRef:
+    name: runtime-sample
+  network:
+    type: NodePort

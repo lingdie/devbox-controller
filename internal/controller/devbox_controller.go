@@ -22,6 +22,7 @@ import (
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"github.com/labring/sealos/controllers/devbox/label"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -34,40 +35,25 @@ import (
 )
 
 const (
+	rate          = 10
 	FinalizerName = "devbox.sealos.io/finalizer"
-)
-
-const (
-	DevBoxPartOf = "devbox"
-)
-
-const (
-	Devbox = "devbox"
-)
-const (
-	rate = 10
+	Devbox        = "devbox"
+	DevBoxPartOf  = "devbox"
 )
 
 // DevboxReconciler reconciles a Devbox object
 type DevboxReconciler struct {
+	CommitImageRegistry string
+
 	client.Client
 	Scheme   *runtime.Scheme
-	recorder record.EventRecorder
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxes/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Devbox object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx, "devbox", req.NamespacedName)
 	devbox := &devboxv1alpha1.Devbox{}
@@ -89,9 +75,8 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.fillDefaultValue(ctx, devbox); err != nil {
-		return ctrl.Result{}, err
-	}
+	devbox.Status.Network.Type = devbox.Spec.NetworkSpec.Type
+	_ = r.Status().Update(ctx, devbox)
 
 	recLabels := label.RecommendedLabels(&label.Recommended{
 		Name:      devbox.Name,
@@ -99,40 +84,63 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		PartOf:    DevBoxPartOf,
 	})
 
-	if err := r.syncPod(ctx, devbox, recLabels); err != nil {
-		logger.Error(err, "create pod failed")
-		r.recorder.Eventf(devbox, corev1.EventTypeWarning, "Create pod failed", "%v", err)
-		return ctrl.Result{}, err
+	// if devbox is running, create or update pod
+	if devbox.Spec.State == devboxv1alpha1.DevboxStateRunning {
+		if err := r.syncPod(ctx, devbox, recLabels); err != nil {
+			logger.Error(err, "create or update pod failed")
+			r.Recorder.Eventf(devbox, corev1.EventTypeWarning, "Create pod failed", "%v", err)
+			return ctrl.Result{}, err
+		}
 	}
 
-	currentTime := time.Now()
-	formattedTime := currentTime.Format(time.RFC3339)
-
-	devbox.Status.Commit.CommitID = formattedTime
-	if err := r.Update(ctx, devbox); err != nil {
-		return ctrl.Result{}, err
+	// create service if network type is NodePort
+	if devbox.Spec.NetworkSpec.Type == devboxv1alpha1.NetworkTypeNodePort {
+		if err := r.syncService(ctx, devbox, recLabels); err != nil {
+			logger.Error(err, "Create service failed")
+			r.Recorder.Eventf(devbox, corev1.EventTypeWarning, "Create service failed", "%v", err)
+			return ctrl.Result{}, err
+		}
 	}
-
-	if err := r.syncService(ctx, devbox, recLabels); err != nil {
-		logger.Error(err, "create service failed")
-		r.recorder.Eventf(devbox, corev1.EventTypeWarning, "Create service failed", "%v", err)
-		return ctrl.Result{}, err
-	}
-
-	r.recorder.Eventf(devbox, corev1.EventTypeNormal, "Created", "create terminal success: %v", devbox.ObjectMeta.Name)
+	r.Recorder.Eventf(devbox, corev1.EventTypeNormal, "Created", "create devbox success: %v", devbox.ObjectMeta.Name)
 	return ctrl.Result{}, nil
 }
 
-func (r *DevboxReconciler) fillDefaultValue(ctx context.Context, devbox *devboxv1alpha1.Devbox) error {
-	return nil
-}
-
 func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.Devbox, recLabels map[string]string) error {
+	logger := log.FromContext(ctx, "devbox", devbox.Name, "namespace", devbox.Namespace)
+
 	objectMeta := metav1.ObjectMeta{
-		Name:      devbox.ObjectMeta.Name,
-		Namespace: devbox.ObjectMeta.Namespace,
+		Name:      devbox.Name,
+		Namespace: devbox.Namespace,
 		Labels:    recLabels,
 	}
+	devboxPod := &corev1.Pod{
+		ObjectMeta: objectMeta,
+	}
+	err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Name}, devboxPod)
+	if err != nil && client.IgnoreNotFound(err) != nil {
+		// error other than not found
+		logger.Error(err, "get devbox pod failed")
+		return err
+	} else if err != nil && client.IgnoreNotFound(err) == nil {
+		// no devbox pod found, create a new one, do nothing here
+	} else if err == nil {
+		// no need to create pod if it already exists and is running or pending
+		if devboxPod.Status.Phase == corev1.PodRunning || devboxPod.Status.Phase == corev1.PodPending {
+			return nil
+		}
+	}
+
+	// delete pod anyway
+	_ = r.Delete(ctx, devboxPod)
+
+	// create a new commit history if we need recreate pod for next commit
+	nextCommitHistory := devboxv1alpha1.CommitHistory{
+		Image:  r.generateImageName(devbox),
+		Time:   metav1.Now(),
+		Status: devboxv1alpha1.CommitStatusPending,
+	}
+
+	// recreate pod
 	ports := []corev1.ContainerPort{
 		{
 			Name:          "http",
@@ -142,22 +150,22 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	}
 
 	envs := []corev1.EnvVar{
-		{Name: "POD_TYPE", Value: Devbox},
-		{Name: "VERSION", Value: devbox.Status.Commit.CommitID},
+		{
+			Name:  "SEALOS_COMMIT_ON_STOP",
+			Value: "true",
+		},
+		{
+			Name:  "SEALOS_COMMIT_IMAGE_NAME",
+			Value: nextCommitHistory.Image,
+		},
 	}
 
-	cpuRequest := devbox.Spec.Resource["cpu"]
-	memoryRequest := devbox.Spec.Resource["memory"]
-
-	cpuLimit := cpuRequest.DeepCopy()
-	cpuLimit.Set(cpuRequest.Value() * rate)
-
-	memoryLimit := memoryRequest.DeepCopy()
-	memoryLimit.Set(memoryRequest.Value() * rate)
-
 	//get image name
-	imageName, err := r.GetImageName(ctx, devbox)
-
+	imageName, err := r.getImageName(ctx, devbox)
+	if err != nil {
+		logger.Error(err, "get image name failed")
+		return err
+	}
 	containers := []corev1.Container{
 		{
 			Name:  devbox.ObjectMeta.Name,
@@ -165,13 +173,15 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			Ports: ports,
 			Env:   envs,
 			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					"cpu":    cpuRequest,
-					"memory": memoryRequest,
-				},
+				Requests: calculateResourceRequest(
+					corev1.ResourceList{
+						corev1.ResourceCPU:    devbox.Spec.Resource["cpu"],
+						corev1.ResourceMemory: devbox.Spec.Resource["memory"],
+					},
+				),
 				Limits: corev1.ResourceList{
-					"cpu":    cpuLimit,
-					"memory": memoryLimit,
+					"cpu":    devbox.Spec.Resource["cpu"],
+					"memory": devbox.Spec.Resource["memory"],
 				},
 			},
 		},
@@ -179,33 +189,41 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	expectPod := &corev1.Pod{
 		ObjectMeta: objectMeta,
 		Spec: corev1.PodSpec{
-			Containers: containers,
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers:    containers,
 		},
 	}
-
-	pod := &corev1.Pod{
-		ObjectMeta: objectMeta,
+	if err = controllerutil.SetControllerReference(devbox, expectPod, r.Scheme); err != nil {
+		return err
 	}
-
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, pod, func() error {
-		// only update some specific fields
-		pod.Spec.Containers = expectPod.Spec.Containers
-		return controllerutil.SetControllerReference(devbox, pod, r.Scheme)
-	})
-	if err != nil {
+	if err = r.Create(ctx, expectPod); err != nil {
+		logger.Error(err, "create pod failed")
 		return err
 	}
 
-	return nil
+	// todo add check commit status...
+	// update the last commit history status to success
+	if len(devbox.Status.CommitHistory) != 0 {
+		devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Status = devboxv1alpha1.CommitStatusSuccess
+	}
+	// add next commit history to status
+	devbox.Status.CommitHistory = append(devbox.Status.CommitHistory, nextCommitHistory)
+	return r.Status().Update(ctx, devbox)
 }
 
-func (r *DevboxReconciler) GetImageName(ctx context.Context, devbox *devboxv1alpha1.Devbox) (string, error) {
-	var err error
-	if len(devbox.Status.Commit.CommitID) == 0 {
-		return devbox.Spec.RuntimeRef.Name, err
-	} else {
-		return devbox.Status.Commit.CommitID, err
+func (r *DevboxReconciler) getImageName(ctx context.Context, devbox *devboxv1alpha1.Devbox) (string, error) {
+	// get image name from runtime if commit history is empty
+	if devbox.Status.CommitHistory == nil || len(devbox.Status.CommitHistory) == 0 {
+		rt := &devboxv1alpha1.Runtime{}
+		err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Spec.RuntimeRef.Name}, rt)
+		if err != nil {
+			return "", err
+		}
+		return rt.Spec.Image, nil
 	}
+	// get image name from commit history, ues the latest commit history
+	commitHistory := devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1]
+	return commitHistory.Image, nil
 }
 
 func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alpha1.Devbox, recLabels map[string]string) error {
@@ -216,23 +234,15 @@ func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alph
 			{
 				Name:       "tty",
 				Port:       2222,
-				TargetPort: intstr.FromInt(2222),
+				TargetPort: intstr.FromInt32(2222),
 				Protocol:   corev1.ProtocolTCP,
-				//NodePort:   30000,
 			},
 		},
 	}
 
-	if devbox.Status.Network.ServiceName == "" {
-		devbox.Status.Network.ServiceName = devbox.Name + "-svc"
-		if err := r.Status().Update(ctx, devbox); err != nil {
-			return err
-		}
-	}
-
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      devbox.Status.Network.ServiceName,
+			Name:      devbox.Name + "-svc",
 			Namespace: devbox.Namespace,
 			Labels:    recLabels,
 		},
@@ -271,14 +281,38 @@ func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alph
 	}
 	if nodePort == 0 {
 		return fmt.Errorf("NodePort not found for service %s", service.Name)
-	} else {
-		devbox.Status.Network.NodePort = nodePort
-		if err := r.Status().Update(ctx, devbox); err != nil {
-			return err
-		}
 	}
-
+	devbox.Status.Network.Type = devboxv1alpha1.NetworkTypeNodePort
+	devbox.Status.Network.NodePort = nodePort
+	if err := r.Status().Update(ctx, devbox); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (r *DevboxReconciler) generateImageName(devbox *devboxv1alpha1.Devbox) string {
+	now := time.Now()
+	return fmt.Sprintf("%s/%s/%s:%s", r.CommitImageRegistry, devbox.Namespace, devbox.Name, now.Format("2006-01-02-150405"))
+}
+
+func calculateResourceRequest(limit corev1.ResourceList) corev1.ResourceList {
+	if limit == nil {
+		return nil
+	}
+	request := make(corev1.ResourceList)
+	// Calculate CPU request
+	if cpu, ok := limit[corev1.ResourceCPU]; ok {
+		cpuValue := cpu.AsApproximateFloat64()
+		cpuRequest := cpuValue / rate
+		request[corev1.ResourceCPU] = *resource.NewMilliQuantity(int64(cpuRequest*1000), resource.DecimalSI)
+	}
+	// Calculate memory request
+	if memory, ok := limit[corev1.ResourceMemory]; ok {
+		memoryValue := memory.AsApproximateFloat64()
+		memoryRequest := memoryValue / rate
+		request[corev1.ResourceMemory] = *resource.NewQuantity(int64(memoryRequest), resource.BinarySI)
+	}
+	return request
 }
 
 // SetupWithManager sets up the controller with the Manager.

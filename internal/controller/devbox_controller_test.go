@@ -18,6 +18,10 @@ package controller
 
 import (
 	"context"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"reflect"
+	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -82,3 +86,31 @@ var _ = Describe("Devbox Controller", func() {
 		})
 	})
 })
+
+func Test_calculateResourceRequest(t *testing.T) {
+	type args struct {
+		limit v1.ResourceList
+	}
+	tests := []struct {
+		name string
+		args args
+		want v1.ResourceList
+	}{
+		{
+			name: "calculateResourceRequest",
+			args: args{
+				limit: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("1"),
+					v1.ResourceMemory: resource.MustParse("1Gi"),
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := calculateResourceRequest(tt.args.limit); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("calculateResourceRequest() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
