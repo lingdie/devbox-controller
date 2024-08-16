@@ -74,7 +74,7 @@ func (t *RegistryClient) pullManifest(username string, password string, hostName
 	var (
 		client = http.DefaultClient
 		//url    = hostName + imageName + "/manifests/" + tag
-		url = imageName + "/manifests/" + tag
+		url = "http://" + imageName + "/manifests/" + tag
 	)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -105,7 +105,7 @@ func (t *RegistryClient) pushManifest(username string, password string, hostName
 	var (
 		client = http.DefaultClient
 		//url    = hostName + imageName + "/manifests/" + tag
-		url = imageName + "/manifests/" + tag
+		url = "http://" + imageName + "/manifests/" + tag
 	)
 
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(manifest))
