@@ -19,7 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
-	reference "github.com/containerd/containerd/reference"
+	reference "github.com/google/go-containerregistry/pkg/name"
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"github.com/labring/sealos/controllers/devbox/internal/controller/utils"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -147,12 +147,13 @@ func (r *DevBoxReleaseReconciler) GetHostAndImageAndTag(devbox *devboxv1alpha1.D
 	if len(devbox.Status.CommitHistory) == 0 {
 		return "", "", "", fmt.Errorf("commit history is empty")
 	}
-	res, err := reference.Parse(devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Image)
+	res, err := reference.ParseReference(devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Image)
 	if err != nil {
 		return "", "", "", err
 	}
-	fmt.Println("hostname："+res.Hostname()+"locatior："+res.Locator, "object: "+res.Object)
-	return res.Hostname(), res.Locator, res.Object, nil
+	repo := res.Context()
+	fmt.Println("hostname："+repo.RegistryStr()+"locatior："+repo.RepositoryStr(), "object: "+res.Identifier())
+	return repo.RegistryStr(), repo.RepositoryStr(), res.Identifier(), nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
