@@ -37,6 +37,7 @@ type RuntimeStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
 // Runtime is the Schema for the runtimes API
 type Runtime struct {

@@ -35,6 +35,7 @@ type RuntimeClassStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
 // RuntimeClass is the Schema for the runtimeclasses API
 type RuntimeClass struct {
