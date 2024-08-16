@@ -107,7 +107,7 @@ func (t *RegistryClient) pushManifest(username string, password string, hostName
 		//url    = hostName + imageName + "/manifests/" + tag
 		url = "http://" + imageName + "/manifests/" + tag
 	)
-
+	fmt.Println("访问的url为：" + url)
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(manifest))
 	if err != nil {
 		return err
