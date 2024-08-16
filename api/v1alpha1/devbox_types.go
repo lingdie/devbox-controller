@@ -59,8 +59,6 @@ type NetworkSpec struct {
 	// +kubebuilder:validation:Enum=NodePort;Tailnet
 	Type NetworkType `json:"type"`
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
 	ExtraPorts []corev1.ContainerPort `json:"extraPorts"`
 }
 
