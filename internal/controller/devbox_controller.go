@@ -19,19 +19,22 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
+
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"github.com/labring/sealos/controllers/devbox/label"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"time"
 )
 
 const (
@@ -89,7 +92,20 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.syncPod(ctx, devbox, recLabels); err != nil {
 			logger.Error(err, "create or update pod failed")
 			r.Recorder.Eventf(devbox, corev1.EventTypeWarning, "Create pod failed", "%v", err)
+			return ctrl.Result{RequeueAfter: time.Second * 3}, err
+		}
+	} else {
+		// if devbox is not running, delete pod if exists
+		pod := &corev1.Pod{}
+		err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Name}, pod)
+		if err != nil && client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "get devbox pod failed")
 			return ctrl.Result{}, err
+		} else if err == nil {
+			if err = r.Delete(ctx, pod); err != nil {
+				logger.Error(err, "delete devbox pod failed")
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -98,11 +114,11 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.syncService(ctx, devbox, recLabels); err != nil {
 			logger.Error(err, "Create service failed")
 			r.Recorder.Eventf(devbox, corev1.EventTypeWarning, "Create service failed", "%v", err)
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: time.Second * 3}, err
 		}
 	}
 	r.Recorder.Eventf(devbox, corev1.EventTypeNormal, "Created", "create devbox success: %v", devbox.ObjectMeta.Name)
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: false}, nil
 }
 
 func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.Devbox, recLabels map[string]string) error {
@@ -122,93 +138,88 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 		logger.Error(err, "get devbox pod failed")
 		return err
 	} else if err != nil && client.IgnoreNotFound(err) == nil {
-		// no devbox pod found, create a new one, do nothing here
-	} else if err == nil {
-		// no need to create pod if it already exists and is running or pending
-		if devboxPod.Status.Phase == corev1.PodRunning || devboxPod.Status.Phase == corev1.PodPending {
-			return nil
+		// no devbox pod found, create a new one
+		// create a new commit history if we need recreate pod for next commit
+		nextCommitHistory := devboxv1alpha1.CommitHistory{
+			Image:  r.generateImageName(devbox),
+			Time:   metav1.Now(),
+			Status: devboxv1alpha1.CommitStatusPending,
 		}
-	}
 
-	// delete pod anyway
-	_ = r.Delete(ctx, devboxPod)
+		// recreate pod
+		ports := []corev1.ContainerPort{
+			{
+				Name:          "http",
+				Protocol:      corev1.ProtocolTCP,
+				ContainerPort: 2222,
+			},
+		}
 
-	// create a new commit history if we need recreate pod for next commit
-	nextCommitHistory := devboxv1alpha1.CommitHistory{
-		Image:  r.generateImageName(devbox),
-		Time:   metav1.Now(),
-		Status: devboxv1alpha1.CommitStatusPending,
-	}
+		envs := []corev1.EnvVar{
+			{
+				Name:  "SEALOS_COMMIT_ON_STOP",
+				Value: "true",
+			},
+			{
+				Name:  "SEALOS_COMMIT_IMAGE_NAME",
+				Value: nextCommitHistory.Image,
+			},
+		}
 
-	// recreate pod
-	ports := []corev1.ContainerPort{
-		{
-			Name:          "http",
-			Protocol:      corev1.ProtocolTCP,
-			ContainerPort: 2222,
-		},
-	}
-
-	envs := []corev1.EnvVar{
-		{
-			Name:  "SEALOS_COMMIT_ON_STOP",
-			Value: "true",
-		},
-		{
-			Name:  "SEALOS_COMMIT_IMAGE_NAME",
-			Value: nextCommitHistory.Image,
-		},
-	}
-
-	//get image name
-	imageName, err := r.getImageName(ctx, devbox)
-	if err != nil {
-		logger.Error(err, "get image name failed")
-		return err
-	}
-	containers := []corev1.Container{
-		{
-			Name:  devbox.ObjectMeta.Name,
-			Image: imageName,
-			Ports: ports,
-			Env:   envs,
-			Resources: corev1.ResourceRequirements{
-				Requests: calculateResourceRequest(
-					corev1.ResourceList{
-						corev1.ResourceCPU:    devbox.Spec.Resource["cpu"],
-						corev1.ResourceMemory: devbox.Spec.Resource["memory"],
+		//get image name
+		imageName, err := r.getImageName(ctx, devbox)
+		if err != nil {
+			logger.Error(err, "get image name failed")
+			return err
+		}
+		containers := []corev1.Container{
+			{
+				Name:  devbox.ObjectMeta.Name,
+				Image: imageName,
+				Ports: ports,
+				Env:   envs,
+				Resources: corev1.ResourceRequirements{
+					Requests: calculateResourceRequest(
+						corev1.ResourceList{
+							corev1.ResourceCPU:    devbox.Spec.Resource["cpu"],
+							corev1.ResourceMemory: devbox.Spec.Resource["memory"],
+						},
+					),
+					Limits: corev1.ResourceList{
+						"cpu":    devbox.Spec.Resource["cpu"],
+						"memory": devbox.Spec.Resource["memory"],
 					},
-				),
-				Limits: corev1.ResourceList{
-					"cpu":    devbox.Spec.Resource["cpu"],
-					"memory": devbox.Spec.Resource["memory"],
 				},
 			},
-		},
-	}
-	expectPod := &corev1.Pod{
-		ObjectMeta: objectMeta,
-		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
-			Containers:    containers,
-		},
-	}
-	if err = controllerutil.SetControllerReference(devbox, expectPod, r.Scheme); err != nil {
-		return err
-	}
-	if err = r.Create(ctx, expectPod); err != nil {
-		logger.Error(err, "create pod failed")
-		return err
-	}
+		}
+		expectPod := &corev1.Pod{
+			ObjectMeta: objectMeta,
+			Spec: corev1.PodSpec{
+				RestartPolicy:                 corev1.RestartPolicyNever,
+				Containers:                    containers,
+				TerminationGracePeriodSeconds: pointer.Int64(300),
+			},
+		}
+		if err = controllerutil.SetControllerReference(devbox, expectPod, r.Scheme); err != nil {
+			return err
+		}
+		if err = r.Create(ctx, expectPod); err != nil {
+			logger.Error(err, "create pod failed")
+			return err
+		}
 
-	// todo add check commit status...
-	// update the last commit history status to success
-	if len(devbox.Status.CommitHistory) != 0 {
-		devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Status = devboxv1alpha1.CommitStatusSuccess
+		// todo add check commit status...
+		// update the last commit history status to success
+		if len(devbox.Status.CommitHistory) != 0 {
+			devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Status = devboxv1alpha1.CommitStatusSuccess
+		}
+		// add next commit history to status
+		devbox.Status.CommitHistory = append(devbox.Status.CommitHistory, nextCommitHistory)
+		return r.Status().Update(ctx, devbox)
 	}
-	// add next commit history to status
-	devbox.Status.CommitHistory = append(devbox.Status.CommitHistory, nextCommitHistory)
-	return r.Status().Update(ctx, devbox)
+	// if pod exists, do nothing here to prevent from recreating pod and losing data
+
+	return nil
 }
 
 func (r *DevboxReconciler) getImageName(ctx context.Context, devbox *devboxv1alpha1.Devbox) (string, error) {
