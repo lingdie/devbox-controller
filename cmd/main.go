@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/registry"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -165,7 +166,7 @@ func main() {
 	if err = (&controller.DevBoxReleaseReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		TagClient: &tag.registry{
+		TagClient: &registry.RegistryClient{
 			Username: registryUser,
 			Password: registryPassword,
 		},
