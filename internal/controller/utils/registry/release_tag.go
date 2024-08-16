@@ -81,6 +81,7 @@ func (t *RegistryClient) pullManifest(username string, password string, hostName
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("访问的url为：" + url)
 	req.SetBasicAuth(username, password)
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
 
