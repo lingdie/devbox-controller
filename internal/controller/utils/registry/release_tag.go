@@ -73,7 +73,7 @@ func (t *RegistryClient) login(authPath string, username string, password string
 func (t *RegistryClient) pullManifest(username string, password string, hostName string, imageName string, tag string) ([]byte, error) {
 	var (
 		client = http.DefaultClient
-		url    = "http://" + hostName + "v2" + imageName + "/manifests/" + tag
+		url    = "http://" + hostName + "/v2/" + imageName + "/manifests/" + tag
 	)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -104,7 +104,7 @@ func (t *RegistryClient) pullManifest(username string, password string, hostName
 func (t *RegistryClient) pushManifest(username string, password string, hostName string, imageName string, tag string, manifest []byte) error {
 	var (
 		client = http.DefaultClient
-		url    = "http://" + hostName + "v2" + imageName + "/manifests/" + tag
+		url    = "http://" + hostName + "/v2/" + imageName + "/manifests/" + tag
 	)
 
 	fmt.Println("访问的url为：" + url)
