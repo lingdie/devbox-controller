@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	reference "github.com/containerd/containerd/reference"
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/tag"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,17 +28,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"strings"
 )
 
 // DevBoxReleaseReconciler reconciles a DevBoxRelease object
 type DevBoxReleaseReconciler struct {
 	client.Client
-	TagClient      tag.ReleaseTagClient
-	Scheme         *runtime.Scheme
-	Username       string
-	Password       string
-	RepositoryName string
+	TagClient tag.ReleaseTagClient
+	Scheme    *runtime.Scheme
+	Username  string
+	Password  string
 }
 
 const (
@@ -130,11 +129,11 @@ func (r *DevBoxReleaseReconciler) CreateReleaseTag(ctx context.Context, devboxRe
 	if err := r.Get(ctx, devboxInfo, devbox); err != nil {
 		return err
 	}
-	imageName, oldTag, err := r.GetImageAndTag(devbox)
+	hostName, imageName, oldTag, err := r.GetHostAndImageAndTag(devbox)
 	if err != nil {
 		return err
 	}
-	err = r.TagClient.TagImage(r.Username, r.Password, r.RepositoryName, imageName, oldTag, devboxRelease.Spec.NewTag)
+	err = r.TagClient.TagImage(r.Username, r.Password, hostName, imageName, oldTag, devboxRelease.Spec.NewTag)
 	if err != nil {
 		return err
 	}
@@ -146,27 +145,19 @@ func (r *DevBoxReleaseReconciler) DeleteReleaseTag(ctx context.Context, devboxRe
 	return nil
 }
 
-func (r *DevBoxReleaseReconciler) GetImageAndTag(devbox *devboxv1alpha1.Devbox) (string, string, error) {
+func (r *DevBoxReleaseReconciler) GetHostAndImageAndTag(devbox *devboxv1alpha1.Devbox) (string, string, string, error) {
 	var path string
 	if len(devbox.Status.CommitHistory) == 0 {
-		return "", "", fmt.Errorf("commit history is empty")
+		return "", "", "", fmt.Errorf("commit history is empty")
 	} else {
 		path = devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Image
 	}
-
-	parts := strings.Split(path, "/")
-	var tag string
-	var image string
-	if len(parts) > 2 {
-		fullTag := strings.Split(parts[2], ":")
-		if len(fullTag) == 2 {
-			tag = fullTag[1]
-		}
-		image = parts[1] + "/" + fullTag[0]
-		return image, tag, nil
-	} else {
-		return "", "", fmt.Errorf("commit history is error")
+	res, err := reference.Parse(path)
+	if err != nil {
+		return "", "", "", err
 	}
+	return res.Hostname(), res.Locator, res.Object, nil
+
 }
 
 // SetupWithManager sets up the controller with the Manager.

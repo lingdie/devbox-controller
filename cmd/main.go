@@ -66,7 +66,7 @@ func main() {
 	var authAddr string
 	flag.StringVar(&registryAddr, "registry-addr", "sealos.hub:5000", "The address of the registry")
 	flag.StringVar(&registryUser, "registry-user", "admin", "The user of the registry")
-	flag.StringVar(&registryPassword, "registry-password", "admin", "The password of the registry")
+	flag.StringVar(&registryPassword, "registry-password", "passw0rd", "The password of the registry")
 	flag.StringVar(&authAddr, "auth-addr", "sealos.hub:5000", "The address of the auth")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -164,16 +164,11 @@ func main() {
 	}
 
 	if err = (&controller.DevBoxReleaseReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		TagClient: &dockerhub.DockerhubClient{
-			AuthPath:     authAddr,
-			RegistryPath: registryAddr,
-		},
-		Username: registryUser,
-		Password: registryPassword,
-		// The repository is the same as the username
-		RepositoryName: registryUser,
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		TagClient: &dockerhub.PrivateRegistryClient{},
+		Username:  registryUser,
+		Password:  registryPassword,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DevBoxRelease")
 		os.Exit(1)
