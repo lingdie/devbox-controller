@@ -33,17 +33,8 @@ type OperationRequestSpec struct {
 type ActionType string
 
 const (
-	Grant   ActionType = "Grant"
-	Update  ActionType = "Update"
-	Deprive ActionType = "Deprive"
-)
-
-type RoleType string
-
-const (
-	OwnerRoleType     RoleType = "Owner"
-	ManagerRoleType   RoleType = "Manager"
-	DeveloperRoleType RoleType = "Developer"
+	Open  ActionType = "Open"
+	Close ActionType = "Close"
 )
 
 // OperationRequestStatus defines the observed state of OperationRequest
