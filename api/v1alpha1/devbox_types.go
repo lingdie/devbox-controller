@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -57,6 +58,10 @@ type NetworkSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=NodePort;Tailnet
 	Type NetworkType `json:"type"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	ExtraPorts []corev1.ContainerPort `json:"extraPorts"`
 }
 
 // DevboxSpec defines the desired state of Devbox

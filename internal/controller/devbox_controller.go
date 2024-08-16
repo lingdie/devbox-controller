@@ -149,12 +149,12 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 		// recreate pod
 		ports := []corev1.ContainerPort{
 			{
-				Name:          "http",
+				Name:          "ssh",
 				Protocol:      corev1.ProtocolTCP,
 				ContainerPort: 2222,
 			},
 		}
-
+		ports = append(ports, devbox.Spec.NetworkSpec.ExtraPorts...)
 		envs := []corev1.EnvVar{
 			{
 				Name:  "SEALOS_COMMIT_ON_STOP",
