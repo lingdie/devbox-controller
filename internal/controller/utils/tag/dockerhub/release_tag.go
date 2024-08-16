@@ -1,4 +1,4 @@
-package dockerhub
+package registry
 
 import (
 	"bytes"
@@ -9,25 +9,27 @@ import (
 	"net/http"
 )
 
-type PrivateRegistryClient struct {
+type RegistryClient struct {
+	Username string
+	Password string
 }
 
-func (t *PrivateRegistryClient) TagImage(username string, password string, hostName string, imageName string, oldTag string, newTag string) error {
+func (t *RegistryClient) TagImage(hostName string, imageName string, oldTag string, newTag string) error {
 	//token, err := t.login(t.AuthPath, username, password, imageName)
 	//if err != nil {
 	//	return err
 	//}
-	manifest, err := t.pullManifest(username, password, hostName, imageName, oldTag)
+	manifest, err := t.pullManifest(t.Username, t.Password, hostName, imageName, oldTag)
 	if err != nil {
 		return err
 	}
-	if err := t.pushManifest(username, password, hostName, imageName, newTag, manifest); err != nil {
+	if err := t.pushManifest(t.Username, t.Password, hostName, imageName, newTag, manifest); err != nil {
 		fmt.Println(err)
 	}
 	return nil
 }
 
-func (t *PrivateRegistryClient) login(authPath string, username string, password string, imageName string) (string, error) {
+func (t *RegistryClient) login(authPath string, username string, password string, imageName string) (string, error) {
 	var (
 		client = http.DefaultClient
 		url    = authPath + imageName + ":pull,push"
@@ -68,7 +70,7 @@ func (t *PrivateRegistryClient) login(authPath string, username string, password
 	return data.Token, nil
 }
 
-func (t *PrivateRegistryClient) pullManifest(username string, password string, hostName string, imageName string, tag string) ([]byte, error) {
+func (t *RegistryClient) pullManifest(username string, password string, hostName string, imageName string, tag string) ([]byte, error) {
 	var (
 		client = http.DefaultClient
 		url    = hostName + imageName + "/manifests/" + tag
@@ -98,7 +100,7 @@ func (t *PrivateRegistryClient) pullManifest(username string, password string, h
 	return bodyText, nil
 }
 
-func (t *PrivateRegistryClient) pushManifest(username string, password string, hostName string, imageName string, tag string, manifest []byte) error {
+func (t *RegistryClient) pushManifest(username string, password string, hostName string, imageName string, tag string, manifest []byte) error {
 	var (
 		client = http.DefaultClient
 		url    = hostName + imageName + "/manifests/" + tag

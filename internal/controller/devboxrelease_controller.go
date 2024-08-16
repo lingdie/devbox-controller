@@ -33,10 +33,8 @@ import (
 // DevBoxReleaseReconciler reconciles a DevBoxRelease object
 type DevBoxReleaseReconciler struct {
 	client.Client
-	TagClient tag.ReleaseTagClient
+	TagClient tag.Client
 	Scheme    *runtime.Scheme
-	Username  string
-	Password  string
 }
 
 const (
@@ -133,7 +131,7 @@ func (r *DevBoxReleaseReconciler) CreateReleaseTag(ctx context.Context, devboxRe
 	if err != nil {
 		return err
 	}
-	err = r.TagClient.TagImage(r.Username, r.Password, hostName, imageName, oldTag, devboxRelease.Spec.NewTag)
+	err = r.TagClient.TagImage(hostName, imageName, oldTag, devboxRelease.Spec.NewTag)
 	if err != nil {
 		return err
 	}
@@ -146,18 +144,14 @@ func (r *DevBoxReleaseReconciler) DeleteReleaseTag(ctx context.Context, devboxRe
 }
 
 func (r *DevBoxReleaseReconciler) GetHostAndImageAndTag(devbox *devboxv1alpha1.Devbox) (string, string, string, error) {
-	var path string
 	if len(devbox.Status.CommitHistory) == 0 {
 		return "", "", "", fmt.Errorf("commit history is empty")
-	} else {
-		path = devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Image
 	}
-	res, err := reference.Parse(path)
+	res, err := reference.Parse(devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Image)
 	if err != nil {
 		return "", "", "", err
 	}
 	return res.Hostname(), res.Locator, res.Object, nil
-
 }
 
 // SetupWithManager sets up the controller with the Manager.

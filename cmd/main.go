@@ -164,11 +164,12 @@ func main() {
 	}
 
 	if err = (&controller.DevBoxReleaseReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		TagClient: &dockerhub.PrivateRegistryClient{},
-		Username:  registryUser,
-		Password:  registryPassword,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		TagClient: &registry.RegistryClient{
+			Username: registryUser,
+			Password: registryPassword,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DevBoxRelease")
 		os.Exit(1)
