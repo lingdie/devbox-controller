@@ -21,7 +21,7 @@ import (
 	"fmt"
 	reference "github.com/containerd/containerd/reference"
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
-	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/tag"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,7 +33,7 @@ import (
 // DevBoxReleaseReconciler reconciles a DevBoxRelease object
 type DevBoxReleaseReconciler struct {
 	client.Client
-	TagClient tag.Client
+	TagClient utils.Client
 	Scheme    *runtime.Scheme
 }
 
