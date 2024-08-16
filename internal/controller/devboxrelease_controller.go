@@ -18,8 +18,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	reference "github.com/google/go-containerregistry/pkg/name"
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
-	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/tag"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,7 +33,7 @@ import (
 // DevBoxReleaseReconciler reconciles a DevBoxRelease object
 type DevBoxReleaseReconciler struct {
 	client.Client
-	TagClient tag.ReleaseTagClient
+	TagClient utils.Client
 	Scheme    *runtime.Scheme
 }
 
@@ -68,9 +70,15 @@ func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 		}
 	} else {
-		if controllerutil.RemoveFinalizer(devboxRelease, FinalizerName) {
-			if err := r.Update(ctx, devboxRelease); err != nil {
+		if controllerutil.ContainsFinalizer(devboxRelease, FinalizerName) {
+			err := r.DeleteReleaseTag(ctx, devboxRelease)
+			if err != nil {
 				return ctrl.Result{}, err
+			}
+			if controllerutil.RemoveFinalizer(devboxRelease, FinalizerName) {
+				if err := r.Update(ctx, devboxRelease); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 		}
 		return ctrl.Result{}, nil
@@ -78,36 +86,74 @@ func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if len(devboxRelease.Status.Phase) == 0 {
 		devboxRelease.Status.Phase = DevboxReleaseNotTagged
-		err := r.Update(ctx, devboxRelease)
+		err := r.CreateReleaseTag(ctx, devboxRelease)
 		if err != nil {
 			return ctrl.Result{}, err
-		}
-		username := "mlhiter"
-		password := "9wv4sWHL!t8GFmD"
-		repositoryName := "mlhiter"
-		devbox := &devboxv1alpha1.Devbox{}
-		devboxInfo := types.NamespacedName{
-			Name:      devboxRelease.Spec.DevboxName,
-			Namespace: devboxRelease.Namespace,
-		}
-		if err := r.Get(ctx, devboxInfo, devbox); err != nil {
-			return ctrl.Result{}, client.IgnoreNotFound(err)
-		}
-
-		//imageName := devbox.Status.Commit.CommitID
-		//oldTag := devboxRelease.Spec.OldTag
-
-		newTag := devboxRelease.Spec.NewTag
-		err = r.TagClient.TagImage(username, password, repositoryName, imageName, oldTag, newTag)
-		if err != nil {
-			return ctrl.Result{}, err
+		} else {
+			devboxRelease.Status.Phase = DevboxReleaseTagged
 		}
 		err = r.Update(ctx, devboxRelease)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 	}
+
+	if devboxRelease.Status.Phase == DevboxReleaseNotTagged {
+		err := r.CreateReleaseTag(ctx, devboxRelease)
+		if err != nil {
+			return ctrl.Result{}, err
+		} else {
+			devboxRelease.Status.Phase = DevboxReleaseTagged
+		}
+		err = r.Update(ctx, devboxRelease)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	if devboxRelease.Status.Phase == DevboxReleaseTagged {
+		return ctrl.Result{}, nil
+	}
+
 	return ctrl.Result{}, nil
+}
+
+func (r *DevBoxReleaseReconciler) CreateReleaseTag(ctx context.Context, devboxRelease *devboxv1alpha1.DevBoxRelease) error {
+	devbox := &devboxv1alpha1.Devbox{}
+	devboxInfo := types.NamespacedName{
+		Name:      devboxRelease.Spec.DevboxName,
+		Namespace: devboxRelease.Namespace,
+	}
+	if err := r.Get(ctx, devboxInfo, devbox); err != nil {
+		return err
+	}
+	hostName, imageName, oldTag, err := r.GetHostAndImageAndTag(devbox)
+	if err != nil {
+		return err
+	}
+	err = r.TagClient.TagImage(hostName, imageName, oldTag, devboxRelease.Spec.NewTag)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *DevBoxReleaseReconciler) DeleteReleaseTag(ctx context.Context, devboxRelease *devboxv1alpha1.DevBoxRelease) error {
+	//todo only delete CR without doing any other operations
+	return nil
+}
+
+func (r *DevBoxReleaseReconciler) GetHostAndImageAndTag(devbox *devboxv1alpha1.Devbox) (string, string, string, error) {
+	if len(devbox.Status.CommitHistory) == 0 {
+		return "", "", "", fmt.Errorf("commit history is empty")
+	}
+	res, err := reference.ParseReference(devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Image)
+	if err != nil {
+		return "", "", "", err
+	}
+	repo := res.Context()
+	fmt.Println("hostname："+repo.RegistryStr()+"locatior："+repo.RepositoryStr(), "object: "+res.Identifier())
+	return repo.RegistryStr(), repo.RepositoryStr(), res.Identifier(), nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

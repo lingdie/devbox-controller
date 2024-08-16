@@ -19,7 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/tag/dockerhub"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/registry"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -46,13 +46,6 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
-var (
-	TagClient = &dockerhub.DockerhubClient{
-		AuthPath:     "https://auth.docker.io/token?service=registry.docker.io&scope=repository:",
-		RegistryPath: "https://index.docker.io/v2/",
-	}
-)
-
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
@@ -70,9 +63,11 @@ func main() {
 	var registryAddr string
 	var registryUser string
 	var registryPassword string
+	var authAddr string
 	flag.StringVar(&registryAddr, "registry-addr", "sealos.hub:5000", "The address of the registry")
 	flag.StringVar(&registryUser, "registry-user", "admin", "The user of the registry")
-	flag.StringVar(&registryPassword, "registry-password", "admin", "The password of the registry")
+	flag.StringVar(&registryPassword, "registry-password", "passw0rd", "The password of the registry")
+	flag.StringVar(&authAddr, "auth-addr", "sealos.hub:5000", "The address of the auth")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -167,21 +162,26 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Devbox")
 		os.Exit(1)
 	}
+
 	if err = (&controller.DevBoxReleaseReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		TagClient: TagClient,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		TagClient: &registry.RegistryClient{
+			Username: registryUser,
+			Password: registryPassword,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DevBoxRelease")
 		os.Exit(1)
 	}
-	if err = (&controller.OperationRequestReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "OperationRequest")
-		os.Exit(1)
-	}
+	//if err = (&controller.OperationRequestReconciler{
+	//	CommitImageRegistry: registryAddr,
+	//	Client:              mgr.GetClient(),
+	//	Scheme:              mgr.GetScheme(),
+	//}).SetupWithManager(mgr); err != nil {
+	//	setupLog.Error(err, "unable to create controller", "controller", "OperationRequest")
+	//	os.Exit(1)
+	//}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

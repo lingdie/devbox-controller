@@ -25,46 +25,15 @@ import (
 
 // OperationRequestSpec defines the desired state of OperationRequest
 type OperationRequestSpec struct {
-	DevBoxName string `json:"devBoxName"`
-	// +kubebuilder:validation:Enum=Grant;Update;Deprive
-	Action ActionType `json:"action,omitempty"`
 }
-
-type ActionType string
-
-const (
-	Grant   ActionType = "Grant"
-	Update  ActionType = "Update"
-	Deprive ActionType = "Deprive"
-)
-
-type RoleType string
-
-const (
-	OwnerRoleType     RoleType = "Owner"
-	ManagerRoleType   RoleType = "Manager"
-	DeveloperRoleType RoleType = "Developer"
-)
 
 // OperationRequestStatus defines the observed state of OperationRequest
 type OperationRequestStatus struct {
-
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	//+kubebuilder:default:=Pending
 	//+kubebuilder:validation:Enum=Pending;Processing;Completed;Failed
-	Phase RequestPhase `json:"phase,omitempty"`
 }
-
-type RequestPhase string
-
-// These are the valid phases of node.
-const (
-	RequestPending    RequestPhase = "Pending"
-	RequestProcessing RequestPhase = "Processing"
-	RequestCompleted  RequestPhase = "Completed"
-	RequestFailed     RequestPhase = "Failed"
-)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

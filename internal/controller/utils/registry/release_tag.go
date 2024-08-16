@@ -1,4 +1,4 @@
-package dockerhub
+package registry
 
 import (
 	"bytes"
@@ -9,33 +9,30 @@ import (
 	"net/http"
 )
 
-type DockerhubClient struct {
-	AuthPath     string
-	RegistryPath string
+type RegistryClient struct {
+	Username string
+	Password string
 }
 
-func (t *DockerhubClient) TagImage(username string, password string, repositoryName string, imageName string, oldTag string, newTag string) error {
-	fmt.Println("controller已经成功进入啦！tagimage")
-	token, err := t.login(t.AuthPath, username, password, repositoryName, imageName)
+func (t *RegistryClient) TagImage(hostName string, imageName string, oldTag string, newTag string) error {
+	//token, err := t.login(t.AuthPath, username, password, imageName)
+	//if err != nil {
+	//	return err
+	//}
+	manifest, err := t.pullManifest(t.Username, t.Password, hostName, imageName, oldTag)
 	if err != nil {
 		return err
 	}
-	fmt.Println("token: %s\n", token)
-	manifest, err := t.pullManifest(t.RegistryPath, token, repositoryName, imageName, oldTag)
-	if err != nil {
-		return err
-	}
-	fmt.Println("manifest: %s\n", string(manifest))
-	if err := t.pushManifest(t.RegistryPath, token, repositoryName, imageName, newTag, manifest); err != nil {
+	if err := t.pushManifest(t.Username, t.Password, hostName, imageName, newTag, manifest); err != nil {
 		fmt.Println(err)
 	}
 	return nil
 }
 
-func (t *DockerhubClient) login(authPath string, username string, password string, repositoryName string, image string) (string, error) {
+func (t *RegistryClient) login(authPath string, username string, password string, imageName string) (string, error) {
 	var (
 		client = http.DefaultClient
-		url    = authPath + repositoryName + "/" + image + ":pull,push"
+		url    = authPath + imageName + ":pull,push"
 	)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -73,18 +70,18 @@ func (t *DockerhubClient) login(authPath string, username string, password strin
 	return data.Token, nil
 }
 
-func (t *DockerhubClient) pullManifest(registryPath string, token string, repository string, imageName string, tag string) ([]byte, error) {
+func (t *RegistryClient) pullManifest(username string, password string, hostName string, imageName string, tag string) ([]byte, error) {
 	var (
 		client = http.DefaultClient
-		url    = registryPath + repository + "/" + imageName + "/manifests/" + tag
+		url    = "http://" + hostName + "/v2/" + imageName + "/manifests/" + tag
 	)
-	fmt.Println(url)
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
+	fmt.Println("访问的url为：" + url)
+	req.SetBasicAuth(username, password)
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
 
 	resp, err := client.Do(req)
@@ -104,18 +101,20 @@ func (t *DockerhubClient) pullManifest(registryPath string, token string, reposi
 	return bodyText, nil
 }
 
-func (t *DockerhubClient) pushManifest(registryPath string, token string, repository string, imageName string, tag string, manifest []byte) error {
+func (t *RegistryClient) pushManifest(username string, password string, hostName string, imageName string, tag string, manifest []byte) error {
 	var (
 		client = http.DefaultClient
-		url    = registryPath + repository + "/" + imageName + "/manifests/" + tag
+		url    = "http://" + hostName + "/v2/" + imageName + "/manifests/" + tag
 	)
+
+	fmt.Println("访问的url为：" + url)
 
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(manifest))
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.SetBasicAuth(username, password)
 	req.Header.Set("Content-type", "application/vnd.docker.distribution.manifest.v2+json")
 
 	resp, err := client.Do(req)

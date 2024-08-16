@@ -18,20 +18,31 @@ package controller
 
 import (
 	"context"
+	"github.com/go-logr/logr"
+	"k8s.io/client-go/tools/record"
+	"time"
 
+	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 )
 
 // OperationRequestReconciler reconciles a OperationRequest object
 type OperationRequestReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Logger   logr.Logger
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+	// expirationTime is the time duration of the request is expired
+	expirationTime time.Duration
+	// retentionTime is the time duration of the request is retained after it is isCompleted
+	retentionTime       time.Duration
+	CommitImageRegistry string
 }
+
+// OperationReqRequeueDuration is the time interval to reconcile a OperationRequest if no error occurs
+const OperationReqRequeueDuration time.Duration = 30 * time.Second
 
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=operationrequests,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=operationrequests/status,verbs=get;update;patch
@@ -47,10 +58,6 @@ type OperationRequestReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *OperationRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
-
-	// TODO(user): your logic here
-
 	return ctrl.Result{}, nil
 }
 
