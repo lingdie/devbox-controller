@@ -12,7 +12,7 @@ spec:
     listKind: RuntimeList
     plural: runtimes
     singular: runtime
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1alpha1
     schema:
