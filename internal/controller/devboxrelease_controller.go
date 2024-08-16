@@ -151,6 +151,7 @@ func (r *DevBoxReleaseReconciler) GetHostAndImageAndTag(devbox *devboxv1alpha1.D
 	if err != nil {
 		return "", "", "", err
 	}
+	fmt.Println("hostname："+res.Hostname()+"locatior："+res.Locator, "object: "+res.Object)
 	return res.Hostname(), res.Locator, res.Object, nil
 }
 
