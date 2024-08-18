@@ -75,12 +75,10 @@ func (t *RegistryClient) pullManifest(username string, password string, hostName
 		client = http.DefaultClient
 		url    = "http://" + hostName + "/v2/" + imageName + "/manifests/" + tag
 	)
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("访问的url为：" + url)
 	req.SetBasicAuth(username, password)
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
 
@@ -106,9 +104,6 @@ func (t *RegistryClient) pushManifest(username string, password string, hostName
 		client = http.DefaultClient
 		url    = "http://" + hostName + "/v2/" + imageName + "/manifests/" + tag
 	)
-
-	fmt.Println("访问的url为：" + url)
-
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(manifest))
 	if err != nil {
 		return err
