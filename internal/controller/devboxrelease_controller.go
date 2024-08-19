@@ -152,7 +152,6 @@ func (r *DevBoxReleaseReconciler) GetHostAndImageAndTag(devbox *devboxv1alpha1.D
 		return "", "", "", err
 	}
 	repo := res.Context()
-	fmt.Println("hostname："+repo.RegistryStr()+"locatior："+repo.RepositoryStr(), "object: "+res.Identifier())
 	return repo.RegistryStr(), repo.RepositoryStr(), res.Identifier(), nil
 }
 
