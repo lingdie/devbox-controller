@@ -140,12 +140,28 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 	} else if err != nil && client.IgnoreNotFound(err) == nil {
 		// no devbox pod found, create a new one
 		// create a new commit history if we need recreate pod for next commit
+
+		//  check commit status, if devbox pod is pending, we assume the commit status is failed because the pod is not created
+		if devbox.Status.DevboxPodPhase == corev1.PodPending {
+			if len(devbox.Status.CommitHistory) != 0 {
+				devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Status = devboxv1alpha1.CommitStatusFailed
+			}
+		} else {
+			// if devbox pod is not pending, we assume the commit status is success
+			if len(devbox.Status.CommitHistory) != 0 {
+				devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Status = devboxv1alpha1.CommitStatusSuccess
+			}
+		}
+		if err := r.Status().Update(ctx, devbox); err != nil {
+			logger.Error(err, "update devbox status failed")
+			return err
+		}
+
 		nextCommitHistory := devboxv1alpha1.CommitHistory{
 			Image:  r.generateImageName(devbox),
 			Time:   metav1.Now(),
 			Status: devboxv1alpha1.CommitStatusPending,
 		}
-
 		// recreate pod
 		ports := []corev1.ContainerPort{
 			{
@@ -167,7 +183,7 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 		}
 
 		//get image name
-		imageName, err := r.getImageName(ctx, devbox)
+		imageName, err := r.getLastSuccessCommitImageName(ctx, devbox)
 		if err != nil {
 			logger.Error(err, "get image name failed")
 			return err
@@ -207,34 +223,32 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			logger.Error(err, "create pod failed")
 			return err
 		}
-
-		// todo add check commit status...
-		// update the last commit history status to success
-		if len(devbox.Status.CommitHistory) != 0 {
-			devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Status = devboxv1alpha1.CommitStatusSuccess
-		}
 		// add next commit history to status
 		devbox.Status.CommitHistory = append(devbox.Status.CommitHistory, nextCommitHistory)
 		return r.Status().Update(ctx, devbox)
 	}
-	// if pod exists, do nothing here to prevent from recreating pod and losing data
-
-	return nil
+	// if pod exists, update devbox status using pod status
+	devbox.Status.DevboxPodPhase = devboxPod.Status.Phase
+	return r.Status().Update(ctx, devbox)
 }
 
-func (r *DevboxReconciler) getImageName(ctx context.Context, devbox *devboxv1alpha1.Devbox) (string, error) {
+func (r *DevboxReconciler) getLastSuccessCommitImageName(ctx context.Context, devbox *devboxv1alpha1.Devbox) (string, error) {
 	// get image name from runtime if commit history is empty
+	rt := &devboxv1alpha1.Runtime{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Spec.RuntimeRef.Name}, rt); err != nil {
+		return "", err
+	}
 	if devbox.Status.CommitHistory == nil || len(devbox.Status.CommitHistory) == 0 {
-		rt := &devboxv1alpha1.Runtime{}
-		err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Spec.RuntimeRef.Name}, rt)
-		if err != nil {
-			return "", err
-		}
 		return rt.Spec.Image, nil
 	}
 	// get image name from commit history, ues the latest commit history
-	commitHistory := devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1]
-	return commitHistory.Image, nil
+	for i := len(devbox.Status.CommitHistory) - 1; i >= 0; i-- {
+		if devbox.Status.CommitHistory[i].Status == devboxv1alpha1.CommitStatusSuccess {
+			return devbox.Status.CommitHistory[i].Image, nil
+		}
+	}
+	// if all commit history is failed, get image name from runtime
+	return rt.Spec.Image, nil
 }
 
 func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alpha1.Devbox, recLabels map[string]string) error {
