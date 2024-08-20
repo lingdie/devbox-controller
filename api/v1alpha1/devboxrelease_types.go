@@ -20,9 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // DevBoxReleaseSpec defines the desired state of DevBoxRelease
 type DevBoxReleaseSpec struct {
 	// +kubebuilder:validation:Required
@@ -34,16 +31,18 @@ type DevBoxReleaseSpec struct {
 type DevboxReleasePhase string
 
 const (
-	// DevboxReleasePhaseTagged means the Devbox has been tagged
-	DevboxReleasePhaseTagged DevboxReleasePhase = "Tagged"
-	// DevboxReleasePhaseNotTagged means the Devbox has not been tagged
-	DevboxReleasePhaseNotTagged DevboxReleasePhase = "NotTagged"
+	// DevboxReleasePhaseSuccess means the Devbox has been tagged
+	DevboxReleasePhaseSuccess DevboxReleasePhase = "Success"
+	// DevboxReleasePhasePending means the Devbox has not been tagged
+	DevboxReleasePhasePending DevboxReleasePhase = "Pending"
 	// DevboxReleasePhaseFailed means the Devbox has not been tagged
 	DevboxReleasePhaseFailed DevboxReleasePhase = "Failed"
 )
 
 // DevBoxReleaseStatus defines the observed state of DevBoxRelease
 type DevBoxReleaseStatus struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=Pending
 	Phase DevboxReleasePhase `json:"phase"`
 }
 

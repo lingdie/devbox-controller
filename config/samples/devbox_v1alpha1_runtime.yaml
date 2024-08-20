@@ -1,11 +1,9 @@
 apiVersion: devbox.sealos.io/v1alpha1
 kind: Runtime
 metadata:
-  labels:
-    app.kubernetes.io/name: devbox
-    app.kubernetes.io/managed-by: kustomize
-  name: runtime-sample
+  name: golang-1-22-5
 spec:
-  classRef: runtimeclass-sample
-  image: "nginx"
-  description: "test runtime"
+  classRef: golang
+  title: golang 1.22.5
+  image: "ghcr.io/cbluebird/devbox/devbox-go1.22.5:latest"
+  description: "golang runtime 1.22.5"

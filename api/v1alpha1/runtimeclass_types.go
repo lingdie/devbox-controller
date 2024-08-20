@@ -20,10 +20,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type RuntimeClassKind string
+
+const (
+	RuntimeClassLanguageKind  RuntimeClassKind = "Language"
+	RuntimeClassFrameworkKind RuntimeClassKind = "Framework"
+)
+
 // RuntimeClassSpec defines the desired state of RuntimeClass
 type RuntimeClassSpec struct {
 	// +kubebuilder:validation:Required
-	Kind        string `json:"kind"`
+	Title string `json:"title"`
+	// +kubebuilder:validation:Optional
+	Kind RuntimeClassKind `json:"kind"`
+	// +kubebuilder:validation:Optional
 	Description string `json:"description"`
 }
 

@@ -45,10 +45,13 @@ spec:
                 type: string
               image:
                 type: string
+              title:
+                type: string
             required:
             - classRef
             - description
             - image
+            - title
             type: object
           status:
             description: RuntimeStatus defines the observed state of Runtime
