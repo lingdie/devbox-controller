@@ -4,5 +4,6 @@ metadata:
   name: golang-1-22-5
 spec:
   classRef: golang
+  title: golang 1.22.5
   image: "ghcr.io/cbluebird/devbox/devbox-go1.22.5:latest"
   description: "golang runtime 1.22.5"

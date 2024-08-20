@@ -3,5 +3,5 @@ kind: RuntimeClass
 metadata:
   name: golang
 spec:
-  kind: Language
+  title: golang
   description: "golang runtime"

@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"time"
 
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
@@ -87,12 +88,19 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		PartOf:    DevBoxPartOf,
 	})
 
+	// create or update secret
+	if err := r.syncSecret(ctx, devbox, recLabels); err != nil {
+		logger.Error(err, "create or update secret failed")
+		r.Recorder.Eventf(devbox, corev1.EventTypeWarning, "Create secret failed", "%v", err)
+		return ctrl.Result{}, err
+	}
+
 	// if devbox is running, create or update pod
 	if devbox.Spec.State == devboxv1alpha1.DevboxStateRunning {
 		if err := r.syncPod(ctx, devbox, recLabels); err != nil {
 			logger.Error(err, "create or update pod failed")
 			r.Recorder.Eventf(devbox, corev1.EventTypeWarning, "Create pod failed", "%v", err)
-			return ctrl.Result{RequeueAfter: time.Second * 3}, err
+			return ctrl.Result{}, err
 		}
 	} else {
 		// if devbox is not running, delete pod if exists
@@ -119,6 +127,41 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	r.Recorder.Eventf(devbox, corev1.EventTypeNormal, "Created", "create devbox success: %v", devbox.ObjectMeta.Name)
 	return ctrl.Result{Requeue: false}, nil
+}
+
+func (r *DevboxReconciler) syncSecret(ctx context.Context, devbox *devboxv1alpha1.Devbox, recLabels map[string]string) error {
+	logger := log.FromContext(ctx, "devbox", devbox.Name, "namespace", devbox.Namespace)
+	objectMeta := metav1.ObjectMeta{
+		Name:      devbox.Name,
+		Namespace: devbox.Namespace,
+		Labels:    recLabels,
+	}
+	devboxSecret := &corev1.Secret{
+		ObjectMeta: objectMeta,
+	}
+
+	err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Name}, devboxSecret)
+	if err != nil && client.IgnoreNotFound(err) != nil {
+		logger.Error(err, "get devbox secret failed")
+		return err
+	}
+	// if secret not found, create a new one
+	if err != nil && client.IgnoreNotFound(err) == nil {
+		// set password to context, if error then no need to update secret
+		secret := &corev1.Secret{
+			ObjectMeta: objectMeta,
+			Data:       map[string][]byte{"SEALOS_DEVBOX_PASSWORD": []byte(rand.String(12))},
+		}
+		if err := controllerutil.SetControllerReference(devbox, secret, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, secret); err != nil {
+			logger.Error(err, "create devbox secret failed")
+			return err
+		}
+		return nil
+	}
+	return nil
 }
 
 func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.Devbox, recLabels map[string]string) error {
@@ -179,6 +222,17 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			{
 				Name:  "SEALOS_COMMIT_IMAGE_NAME",
 				Value: nextCommitHistory.Image,
+			},
+			{
+				Name: "SEALOS_DEVBOX_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: "SEALOS_DEVBOX_PASSWORD",
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: devbox.Name,
+						},
+					},
+				},
 			},
 		}
 
@@ -344,6 +398,7 @@ func calculateResourceRequest(limit corev1.ResourceList) corev1.ResourceList {
 func (r *DevboxReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&devboxv1alpha1.Devbox{}).
-		Owns(&corev1.Pod{}).Owns(&corev1.Service{}).
+		Owns(&corev1.Pod{}).
+		Owns(&corev1.Service{}).
 		Complete(r)
 }

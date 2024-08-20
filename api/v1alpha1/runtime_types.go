@@ -23,9 +23,12 @@ import (
 // RuntimeSpec defines the desired state of Runtime
 type RuntimeSpec struct {
 	// +kubebuilder:validation:Required
+	Title string `json:"title"`
+	// +kubebuilder:validation:Required
 	ClassRef string `json:"classRef"`
 	// +kubebuilder:validation:Required
-	Image       string `json:"image"`
+	Image string `json:"image"`
+	// +kube:validation:Optional
 	Description string `json:"description"`
 }
 

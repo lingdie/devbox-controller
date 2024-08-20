@@ -30,8 +30,11 @@ const (
 // RuntimeClassSpec defines the desired state of RuntimeClass
 type RuntimeClassSpec struct {
 	// +kubebuilder:validation:Required
-	Kind        RuntimeClassKind `json:"kind"`
-	Description string           `json:"description"`
+	Title string `json:"title"`
+	// +kubebuilder:validation:Optional
+	Kind RuntimeClassKind `json:"kind"`
+	// +kubebuilder:validation:Optional
+	Description string `json:"description"`
 }
 
 // RuntimeClassStatus defines the observed state of RuntimeClass
