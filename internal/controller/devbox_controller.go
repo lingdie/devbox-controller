@@ -210,7 +210,7 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			{
 				Name:          "ssh",
 				Protocol:      corev1.ProtocolTCP,
-				ContainerPort: 2222,
+				ContainerPort: 22,
 			},
 		}
 		ports = append(ports, devbox.Spec.NetworkSpec.ExtraPorts...)
@@ -312,8 +312,8 @@ func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alph
 		Ports: []corev1.ServicePort{
 			{
 				Name:       "tty",
-				Port:       2222,
-				TargetPort: intstr.FromInt32(2222),
+				Port:       22,
+				TargetPort: intstr.FromInt32(22),
 				Protocol:   corev1.ProtocolTCP,
 			},
 		},
