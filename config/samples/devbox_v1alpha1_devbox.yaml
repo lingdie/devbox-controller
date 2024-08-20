@@ -9,9 +9,9 @@ spec:
   state: Running
   resource:
     cpu: 2
-    memory: 4Gi
+    memory: 4000Mi
   runtimeRef:
-    name: runtime-sample
+    name: golang-1-22-5
   network:
     type: NodePort
     extraPorts:

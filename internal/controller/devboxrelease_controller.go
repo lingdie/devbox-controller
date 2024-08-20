@@ -37,25 +37,10 @@ type DevBoxReleaseReconciler struct {
 	Scheme    *runtime.Scheme
 }
 
-const (
-	DevboxReleaseTagged    = "Tagged"
-	DevboxReleaseNotTagged = "NotTagged"
-	DevboxReleaseFailed    = "Failed"
-)
-
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxreleases,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxreleases/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=devbox.sealos.io,resources=devboxreleases/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the DevBoxRelease object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/reconcile
 func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 	devboxRelease := &devboxv1alpha1.DevBoxRelease{}
@@ -84,35 +69,21 @@ func (r *DevBoxReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	if len(devboxRelease.Status.Phase) == 0 {
-		devboxRelease.Status.Phase = DevboxReleaseNotTagged
-		err := r.CreateReleaseTag(ctx, devboxRelease)
-		if err != nil {
-			return ctrl.Result{}, err
-		} else {
-			devboxRelease.Status.Phase = DevboxReleaseTagged
-		}
-		err = r.Update(ctx, devboxRelease)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+	if devboxRelease.Status.Phase == "" {
+		devboxRelease.Status.Phase = devboxv1alpha1.DevboxReleasePhasePending
 	}
 
-	if devboxRelease.Status.Phase == DevboxReleaseNotTagged {
+	if devboxRelease.Status.Phase == devboxv1alpha1.DevboxReleasePhasePending {
 		err := r.CreateReleaseTag(ctx, devboxRelease)
 		if err != nil {
-			return ctrl.Result{}, err
-		} else {
-			devboxRelease.Status.Phase = DevboxReleaseTagged
-		}
-		err = r.Update(ctx, devboxRelease)
-		if err != nil {
+			devboxRelease.Status.Phase = devboxv1alpha1.DevboxReleasePhaseFailed
+			_ = r.Update(ctx, devboxRelease)
 			return ctrl.Result{}, err
 		}
-	}
-
-	if devboxRelease.Status.Phase == DevboxReleaseTagged {
-		return ctrl.Result{}, nil
+		devboxRelease.Status.Phase = devboxv1alpha1.DevboxReleasePhaseSuccess
+		if err = r.Update(ctx, devboxRelease); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
