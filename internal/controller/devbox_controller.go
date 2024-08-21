@@ -95,7 +95,6 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// if devbox is running, create or update pod
 	if err := r.syncPod(ctx, devbox, recLabels); err != nil {
 		logger.Error(err, "sync pod failed")
 		r.Recorder.Eventf(devbox, corev1.EventTypeWarning, "Sync pod failed", "%v", err)
@@ -185,8 +184,8 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			case corev1.PodRunning, corev1.PodPending:
 				return nil
 			case corev1.PodSucceeded, corev1.PodFailed:
-				if controllerutil.RemoveFinalizer(devbox, FinalizerName) {
-					if err := r.Update(ctx, devbox); err != nil {
+				if controllerutil.RemoveFinalizer(&podList.Items[0], FinalizerName) {
+					if err := r.Update(ctx, &podList.Items[0]); err != nil {
 						logger.Error(err, "remove finalizer failed")
 						return err
 					}
@@ -215,7 +214,7 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 		if len(podList.Items) == 1 {
 			// remove finalizer and delete pod
 			if controllerutil.RemoveFinalizer(&podList.Items[0], FinalizerName) {
-				if err := r.Update(ctx, devbox); err != nil {
+				if err := r.Update(ctx, &podList.Items[0]); err != nil {
 					logger.Error(err, "remove finalizer failed")
 					return err
 				}
