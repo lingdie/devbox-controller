@@ -121,6 +121,8 @@ spec:
                   properties:
                     image:
                       type: string
+                    pod:
+                      type: string
                     status:
                       type: string
                     time:
@@ -128,6 +130,7 @@ spec:
                       type: string
                   required:
                   - image
+                  - pod
                   - status
                   - time
                   type: object

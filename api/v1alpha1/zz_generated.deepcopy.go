@@ -219,9 +219,13 @@ func (in *DevboxStatus) DeepCopyInto(out *DevboxStatus) {
 	out.Network = in.Network
 	if in.CommitHistory != nil {
 		in, out := &in.CommitHistory, &out.CommitHistory
-		*out = make([]CommitHistory, len(*in))
+		*out = make([]*CommitHistory, len(*in))
 		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
+			if (*in)[i] != nil {
+				in, out := &(*in)[i], &(*out)[i]
+				*out = new(CommitHistory)
+				(*in).DeepCopyInto(*out)
+			}
 		}
 	}
 }

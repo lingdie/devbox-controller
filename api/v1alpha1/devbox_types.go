@@ -102,6 +102,7 @@ const (
 type CommitHistory struct {
 	Image  string       `json:"image"`
 	Time   metav1.Time  `json:"time"`
+	Pod    string       `json:"pod"`
 	Status CommitStatus `json:"status"`
 }
 
@@ -112,7 +113,7 @@ type DevboxStatus struct {
 	// +kubebuilder:validation:Optional
 	Network NetworkStatus `json:"network"`
 	// +kubebuilder:validation:Optional
-	CommitHistory []CommitHistory `json:"commitHistory"`
+	CommitHistory []*CommitHistory `json:"commitHistory"`
 }
 
 // +kubebuilder:object:root=true

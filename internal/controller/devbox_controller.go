@@ -96,25 +96,10 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// if devbox is running, create or update pod
-	if devbox.Spec.State == devboxv1alpha1.DevboxStateRunning {
-		if err := r.syncPod(ctx, devbox, recLabels); err != nil {
-			logger.Error(err, "create or update pod failed")
-			r.Recorder.Eventf(devbox, corev1.EventTypeWarning, "Create pod failed", "%v", err)
-			return ctrl.Result{}, err
-		}
-	} else {
-		// if devbox is not running, delete pod if exists
-		pod := &corev1.Pod{}
-		err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Name}, pod)
-		if err != nil && client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "get devbox pod failed")
-			return ctrl.Result{}, err
-		} else if err == nil {
-			if err = r.Delete(ctx, pod); err != nil {
-				logger.Error(err, "delete devbox pod failed")
-				return ctrl.Result{}, err
-			}
-		}
+	if err := r.syncPod(ctx, devbox, recLabels); err != nil {
+		logger.Error(err, "sync pod failed")
+		r.Recorder.Eventf(devbox, corev1.EventTypeWarning, "Sync pod failed", "%v", err)
+		return ctrl.Result{}, err
 	}
 
 	// create service if network type is NodePort
@@ -167,123 +152,182 @@ func (r *DevboxReconciler) syncSecret(ctx context.Context, devbox *devboxv1alpha
 func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.Devbox, recLabels map[string]string) error {
 	logger := log.FromContext(ctx, "devbox", devbox.Name, "namespace", devbox.Namespace)
 
-	objectMeta := metav1.ObjectMeta{
-		Name:      devbox.Name,
-		Namespace: devbox.Namespace,
-		Labels:    recLabels,
-	}
-	devboxPod := &corev1.Pod{
-		ObjectMeta: objectMeta,
-	}
-	err := r.Get(ctx, client.ObjectKey{Namespace: devbox.Namespace, Name: devbox.Name}, devboxPod)
-	if err != nil && client.IgnoreNotFound(err) != nil {
-		// error other than not found
-		logger.Error(err, "get devbox pod failed")
+	var podList corev1.PodList
+	if err := r.List(ctx, &podList, client.InNamespace(devbox.Namespace), client.MatchingLabels(recLabels)); err != nil {
+		logger.Error(err, "list devbox pod failed")
 		return err
-	} else if err != nil && client.IgnoreNotFound(err) == nil {
-		// no devbox pod found, create a new one
-		// create a new commit history if we need recreate pod for next commit
-
-		//  check commit status, if devbox pod is pending, we assume the commit status is failed because the pod is not created
-		if devbox.Status.DevboxPodPhase == corev1.PodPending {
-			if len(devbox.Status.CommitHistory) != 0 {
-				devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Status = devboxv1alpha1.CommitStatusFailed
-			}
-		} else {
-			// if devbox pod is not pending, we assume the commit status is success
-			if len(devbox.Status.CommitHistory) != 0 {
-				devbox.Status.CommitHistory[len(devbox.Status.CommitHistory)-1].Status = devboxv1alpha1.CommitStatusSuccess
-			}
-		}
-		if err := r.Status().Update(ctx, devbox); err != nil {
-			logger.Error(err, "update devbox status failed")
-			return err
-		}
-
-		nextCommitHistory := devboxv1alpha1.CommitHistory{
-			Image:  r.generateImageName(devbox),
-			Time:   metav1.Now(),
-			Status: devboxv1alpha1.CommitStatusPending,
-		}
-		// recreate pod
-		ports := []corev1.ContainerPort{
-			{
-				Name:          "ssh",
-				Protocol:      corev1.ProtocolTCP,
-				ContainerPort: 22,
-			},
-		}
-		ports = append(ports, devbox.Spec.NetworkSpec.ExtraPorts...)
-		envs := []corev1.EnvVar{
-			{
-				Name:  "SEALOS_COMMIT_ON_STOP",
-				Value: "true",
-			},
-			{
-				Name:  "SEALOS_COMMIT_IMAGE_NAME",
-				Value: nextCommitHistory.Image,
-			},
-			{
-				Name: "SEALOS_DEVBOX_PASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "SEALOS_DEVBOX_PASSWORD",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: devbox.Name,
-						},
-					},
-				},
-			},
-		}
-
-		//get image name
-		imageName, err := r.getLastSuccessCommitImageName(ctx, devbox)
-		if err != nil {
-			logger.Error(err, "get image name failed")
-			return err
-		}
-		containers := []corev1.Container{
-			{
-				Name:  devbox.ObjectMeta.Name,
-				Image: imageName,
-				Ports: ports,
-				Env:   envs,
-				Resources: corev1.ResourceRequirements{
-					Requests: calculateResourceRequest(
-						corev1.ResourceList{
-							corev1.ResourceCPU:    devbox.Spec.Resource["cpu"],
-							corev1.ResourceMemory: devbox.Spec.Resource["memory"],
-						},
-					),
-					Limits: corev1.ResourceList{
-						"cpu":    devbox.Spec.Resource["cpu"],
-						"memory": devbox.Spec.Resource["memory"],
-					},
-				},
-			},
-		}
-		expectPod := &corev1.Pod{
-			ObjectMeta: objectMeta,
-			Spec: corev1.PodSpec{
-				RestartPolicy:                 corev1.RestartPolicyNever,
-				Containers:                    containers,
-				TerminationGracePeriodSeconds: pointer.Int64(300),
-			},
-		}
-		if err = controllerutil.SetControllerReference(devbox, expectPod, r.Scheme); err != nil {
-			return err
-		}
-		if err = r.Create(ctx, expectPod); err != nil {
-			logger.Error(err, "create pod failed")
-			return err
-		}
-		// add next commit history to status
-		devbox.Status.CommitHistory = append(devbox.Status.CommitHistory, nextCommitHistory)
-		return r.Status().Update(ctx, devbox)
 	}
-	// if pod exists, update devbox status using pod status
-	devbox.Status.DevboxPodPhase = devboxPod.Status.Phase
-	return r.Status().Update(ctx, devbox)
+	// only one pod is allowed, if more than one pod found, return error
+	if len(podList.Items) > 1 {
+		logger.Error(fmt.Errorf("more than one pod found"), "more than one pod found")
+		return fmt.Errorf("more than one pod found")
+	}
+
+	switch devbox.Spec.State {
+	case devboxv1alpha1.DevboxStateRunning:
+		// check pod status, if no pod found, create a new one, with finalizer and controller reference
+		if len(podList.Items) == 0 {
+			nextCommitHistory := r.generateNextCommitHistory(devbox)
+			expectPod, err := r.generateDevboxPod(ctx, devbox, nextCommitHistory)
+			if err = r.Create(ctx, expectPod); err != nil {
+				logger.Error(err, "create pod failed")
+				return err
+			}
+			// add next commit history to status
+			devbox.Status.CommitHistory = append(devbox.Status.CommitHistory, nextCommitHistory)
+			return r.Status().Update(ctx, devbox)
+		}
+		// else if pod found, check pod status
+		// if pod is running or pending do nothing
+		// if pod is succeeded or failed, remove finalizer and delete pod, next reconcile will create a new pod, and update commit history status to success
+		if len(podList.Items) == 1 {
+			switch podList.Items[0].Status.Phase {
+			case corev1.PodRunning, corev1.PodPending:
+				return nil
+			case corev1.PodSucceeded, corev1.PodFailed:
+				if controllerutil.RemoveFinalizer(devbox, FinalizerName) {
+					if err := r.Update(ctx, devbox); err != nil {
+						logger.Error(err, "remove finalizer failed")
+						return err
+					}
+				}
+				_ = r.Delete(ctx, &podList.Items[0])
+				// update commit history status to success by pod name
+				for i := len(devbox.Status.CommitHistory) - 1; i >= 0; i-- {
+					if devbox.Status.CommitHistory[i].Pod == podList.Items[0].Name {
+						devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusSuccess
+						if err := r.Status().Update(ctx, devbox); err != nil {
+							logger.Error(err, "update devbox status failed")
+							return err
+						}
+						return nil
+					}
+				}
+			}
+		}
+
+	case devboxv1alpha1.DevboxStateStopped:
+		// check pod status, if no pod found, do nothing
+		if len(podList.Items) == 0 {
+			return nil
+		}
+		// if pod found, remove finalizer and delete pod
+		if len(podList.Items) == 1 {
+			// remove finalizer and delete pod
+			if controllerutil.RemoveFinalizer(&podList.Items[0], FinalizerName) {
+				if err := r.Update(ctx, devbox); err != nil {
+					logger.Error(err, "remove finalizer failed")
+					return err
+				}
+			}
+			_ = r.Delete(ctx, &podList.Items[0])
+
+			var commitSuccessFlag bool
+			// check pod status, if pod is pending, we assume the commit status is failed because the pod is not created
+			switch podList.Items[0].Status.Phase {
+			case corev1.PodSucceeded, corev1.PodFailed, corev1.PodRunning:
+				commitSuccessFlag = true
+			case corev1.PodPending:
+				commitSuccessFlag = false
+			}
+			// update commit history status to success by pod name
+			for i := len(devbox.Status.CommitHistory) - 1; i >= 0; i-- {
+				if devbox.Status.CommitHistory[i].Pod == podList.Items[0].Name {
+					// based on pod status, update commit history status
+					if commitSuccessFlag {
+						devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusSuccess
+					} else {
+						devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusFailed
+					}
+					devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusSuccess
+					if err := r.Status().Update(ctx, devbox); err != nil {
+						logger.Error(err, "update devbox status failed")
+						return err
+					}
+					return nil
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (r *DevboxReconciler) generateDevboxPod(ctx context.Context, devbox *devboxv1alpha1.Devbox, nextCommitHistory *devboxv1alpha1.CommitHistory) (*corev1.Pod, error) {
+	objectMeta := metav1.ObjectMeta{
+		Name:      nextCommitHistory.Pod,
+		Namespace: devbox.Namespace,
+		Labels:    r.getRecLabels(devbox),
+	}
+
+	ports := []corev1.ContainerPort{
+		{
+			Name:          "ssh",
+			Protocol:      corev1.ProtocolTCP,
+			ContainerPort: 22,
+		},
+	}
+	ports = append(ports, devbox.Spec.NetworkSpec.ExtraPorts...)
+	envs := []corev1.EnvVar{
+		{
+			Name:  "SEALOS_COMMIT_ON_STOP",
+			Value: "true",
+		},
+		{
+			Name:  "SEALOS_COMMIT_IMAGE_NAME",
+			Value: nextCommitHistory.Image,
+		},
+		{
+			Name: "SEALOS_DEVBOX_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "SEALOS_DEVBOX_PASSWORD",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: devbox.Name,
+					},
+				},
+			},
+		},
+	}
+
+	//get image name
+	imageName, err := r.getLastSuccessCommitImageName(ctx, devbox)
+	if err != nil {
+		return nil, err
+	}
+
+	containers := []corev1.Container{
+		{
+			Name:  devbox.ObjectMeta.Name,
+			Image: imageName,
+			Ports: ports,
+			Env:   envs,
+			Resources: corev1.ResourceRequirements{
+				Requests: calculateResourceRequest(
+					corev1.ResourceList{
+						corev1.ResourceCPU:    devbox.Spec.Resource["cpu"],
+						corev1.ResourceMemory: devbox.Spec.Resource["memory"],
+					},
+				),
+				Limits: corev1.ResourceList{
+					"cpu":    devbox.Spec.Resource["cpu"],
+					"memory": devbox.Spec.Resource["memory"],
+				},
+			},
+		},
+	}
+	expectPod := &corev1.Pod{
+		ObjectMeta: objectMeta,
+		Spec: corev1.PodSpec{
+			RestartPolicy:                 corev1.RestartPolicyNever,
+			Containers:                    containers,
+			TerminationGracePeriodSeconds: pointer.Int64(300),
+		},
+	}
+	if err = controllerutil.SetControllerReference(devbox, expectPod, r.Scheme); err != nil {
+		return nil, err
+	}
+	controllerutil.AddFinalizer(expectPod, FinalizerName)
+	return expectPod, nil
 }
 
 func (r *DevboxReconciler) getLastSuccessCommitImageName(ctx context.Context, devbox *devboxv1alpha1.Devbox) (string, error) {
@@ -367,6 +411,24 @@ func (r *DevboxReconciler) syncService(ctx context.Context, devbox *devboxv1alph
 		return err
 	}
 	return nil
+}
+
+func (r *DevboxReconciler) getRecLabels(devbox *devboxv1alpha1.Devbox) map[string]string {
+	return label.RecommendedLabels(&label.Recommended{
+		Name:      devbox.Name,
+		ManagedBy: label.DefaultManagedBy,
+		PartOf:    DevBoxPartOf,
+	})
+}
+
+func (r *DevboxReconciler) generateNextCommitHistory(devbox *devboxv1alpha1.Devbox) *devboxv1alpha1.CommitHistory {
+	now := time.Now()
+	return &devboxv1alpha1.CommitHistory{
+		Image:  r.generateImageName(devbox),
+		Time:   metav1.Time{Time: now},
+		Pod:    devbox.Name + "-" + rand.String(5),
+		Status: devboxv1alpha1.CommitStatusPending,
+	}
 }
 
 func (r *DevboxReconciler) generateImageName(devbox *devboxv1alpha1.Devbox) string {
