@@ -24,8 +24,10 @@ import (
 type DevBoxReleaseSpec struct {
 	// +kubebuilder:validation:Required
 	DevboxName string `json:"devboxName"`
-	NewTag     string `json:"newTag,omitempty"`
-	Notes      string `json:"notes,omitempty"`
+	// +kubebuilder:validation:Required
+	NewTag string `json:"newTag"`
+	// +kubebuilder:validation:Optional
+	Notes string `json:"notes,omitempty"`
 }
 
 type DevboxReleasePhase string

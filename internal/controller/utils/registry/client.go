@@ -4,32 +4,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
+
+	"github.com/avast/retry-go"
 )
 
-type RegistryClient struct {
+type Client struct {
 	Username string
 	Password string
 }
 
-func (t *RegistryClient) TagImage(hostName string, imageName string, oldTag string, newTag string) error {
-	//token, err := t.login(t.AuthPath, username, password, imageName)
-	//if err != nil {
-	//	return err
-	//}
-	manifest, err := t.pullManifest(t.Username, t.Password, hostName, imageName, oldTag)
-	if err != nil {
-		return err
-	}
-	if err := t.pushManifest(t.Username, t.Password, hostName, imageName, newTag, manifest); err != nil {
-		fmt.Println(err)
-	}
-	return nil
+var (
+	ErrorManifestNotFound = errors.New("manifest not found")
+)
+
+func (t *Client) TagImage(hostName string, imageName string, oldTag string, newTag string) error {
+	return retry.Do(func() error {
+		manifest, err := t.pullManifest(t.Username, t.Password, hostName, imageName, oldTag)
+		if err != nil {
+			return err
+		}
+		return t.pushManifest(t.Username, t.Password, hostName, imageName, newTag, manifest)
+	}, retry.Delay(time.Second*5), retry.Attempts(3), retry.LastErrorOnly(true))
 }
 
-func (t *RegistryClient) login(authPath string, username string, password string, imageName string) (string, error) {
+func (t *Client) login(authPath string, username string, password string, imageName string) (string, error) {
 	var (
 		client = http.DefaultClient
 		url    = authPath + imageName + ":pull,push"
@@ -70,7 +71,7 @@ func (t *RegistryClient) login(authPath string, username string, password string
 	return data.Token, nil
 }
 
-func (t *RegistryClient) pullManifest(username string, password string, hostName string, imageName string, tag string) ([]byte, error) {
+func (t *Client) pullManifest(username string, password string, hostName string, imageName string, tag string) ([]byte, error) {
 	var (
 		client = http.DefaultClient
 		url    = "http://" + hostName + "/v2/" + imageName + "/manifests/" + tag
@@ -87,6 +88,10 @@ func (t *RegistryClient) pullManifest(username string, password string, hostName
 		return nil, err
 	}
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrorManifestNotFound
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)
 	}
@@ -95,11 +100,10 @@ func (t *RegistryClient) pullManifest(username string, password string, hostName
 	if err != nil {
 		return nil, err
 	}
-
 	return bodyText, nil
 }
 
-func (t *RegistryClient) pushManifest(username string, password string, hostName string, imageName string, tag string, manifest []byte) error {
+func (t *Client) pushManifest(username string, password string, hostName string, imageName string, tag string, manifest []byte) error {
 	var (
 		client = http.DefaultClient
 		url    = "http://" + hostName + "/v2/" + imageName + "/manifests/" + tag

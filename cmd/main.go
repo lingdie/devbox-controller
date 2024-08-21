@@ -166,7 +166,7 @@ func main() {
 	if err = (&controller.DevBoxReleaseReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		TagClient: &registry.RegistryClient{
+		Registry: &registry.Client{
 			Username: registryUser,
 			Password: registryPassword,
 		},

@@ -47,6 +47,7 @@ spec:
                 type: string
             required:
             - devboxName
+            - newTag
             type: object
           status:
             description: DevBoxReleaseStatus defines the observed state of DevBoxRelease

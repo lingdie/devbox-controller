@@ -3,6 +3,7 @@ module github.com/labring/sealos/controllers/devbox
 go 1.22.0
 
 require (
+	github.com/avast/retry-go v2.7.0+incompatible
 	github.com/go-logr/logr v1.4.1
 	github.com/google/go-containerregistry v0.20.2
 	github.com/onsi/ginkgo/v2 v2.17.1
