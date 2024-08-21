@@ -39,6 +39,10 @@ spec:
           spec:
             description: RuntimeSpec defines the desired state of Runtime
             properties:
+              category:
+                items:
+                  type: string
+                type: array
               classRef:
                 type: string
               description:
