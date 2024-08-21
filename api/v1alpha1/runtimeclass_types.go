@@ -23,6 +23,7 @@ import (
 type RuntimeClassKind string
 
 const (
+	RuntimeClassOSKind        RuntimeClassKind = "OS"
 	RuntimeClassLanguageKind  RuntimeClassKind = "Language"
 	RuntimeClassFrameworkKind RuntimeClassKind = "Framework"
 )
@@ -30,9 +31,10 @@ const (
 // RuntimeClassSpec defines the desired state of RuntimeClass
 type RuntimeClassSpec struct {
 	// +kubebuilder:validation:Required
-	Title string `json:"title"`
-	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=OS;Language;Framework
 	Kind RuntimeClassKind `json:"kind"`
+	// +kubebuilder:validation:Required
+	Title string `json:"title"`
 	// +kubebuilder:validation:Optional
 	Description string `json:"description"`
 }

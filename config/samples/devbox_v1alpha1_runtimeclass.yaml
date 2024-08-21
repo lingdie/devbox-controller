@@ -1,7 +1,8 @@
 apiVersion: devbox.sealos.io/v1alpha1
 kind: RuntimeClass
 metadata:
-  name: golang
+  name: go
 spec:
-  title: golang
-  description: "golang runtime"
+  kind: Language
+  title: go
+  description: go

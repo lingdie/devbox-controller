@@ -24,6 +24,8 @@ import (
 type RuntimeSpec struct {
 	// +kubebuilder:validation:Required
 	Title string `json:"title"`
+	// +kubebuilder:validation:Optional
+	Category []string `json:"category"`
 	// +kubebuilder:validation:Required
 	ClassRef string `json:"classRef"`
 	// +kubebuilder:validation:Required

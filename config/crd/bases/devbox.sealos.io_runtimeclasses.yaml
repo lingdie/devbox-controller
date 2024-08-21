@@ -42,10 +42,15 @@ spec:
               description:
                 type: string
               kind:
+                enum:
+                  - OS
+                  - Language
+                  - Framework
                 type: string
               title:
                 type: string
             required:
+              - kind
               - title
             type: object
           status:
