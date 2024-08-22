@@ -81,7 +81,6 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				return ctrl.Result{}, err
 			}
 		}
-		return ctrl.Result{}, nil
 	}
 
 	devbox.Status.Network.Type = devbox.Spec.NetworkSpec.Type
