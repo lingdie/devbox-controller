@@ -74,13 +74,12 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	} else {
 		if devbox.Spec.State == devboxv1alpha1.DevboxStateRunning {
 			devbox.Spec.State = devboxv1alpha1.DevboxStateStopped
+			return ctrl.Result{}, r.Update(ctx, devbox)
+		}
+		if controllerutil.RemoveFinalizer(devbox, FinalizerName) {
 			if err := r.Update(ctx, devbox); err != nil {
 				return ctrl.Result{}, err
 			}
-		}
-		controllerutil.RemoveFinalizer(devbox, FinalizerName)
-		if err := r.Update(ctx, devbox); err != nil {
-			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
