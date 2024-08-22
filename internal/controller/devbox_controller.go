@@ -19,8 +19,9 @@ package controller
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/rand"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/rand"
 
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"github.com/labring/sealos/controllers/devbox/label"
@@ -177,13 +178,20 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			return r.Status().Update(ctx, devbox)
 		}
 		// else if pod found, check pod status
-		// if pod is running or pending do nothing
-		// if pod is succeeded or failed, remove finalizer and delete pod, next reconcile will create a new pod, and update commit history status to success
+		// if pod is running
+		//    we assume the commit status is success, update commit history status to success by pod name
+		// if pod is pending
+		//    we assume the commit status is failed, update commit history status to failed by pod name
+		// if pod is succeeded, remove finalizer and delete pod, next reconcile will create a new pod, and update commit history status to success
 		if len(podList.Items) == 1 {
 			switch podList.Items[0].Status.Phase {
-			case corev1.PodRunning, corev1.PodPending:
-				return nil
-			case corev1.PodSucceeded, corev1.PodFailed:
+			case corev1.PodPending:
+				// do nothing, wait for next reconcile or wait for pod to be running or failed
+			case corev1.PodRunning:
+				// we do not recreate pod if it is running, even if pod does not have expected values
+				// update commit history status to success by pod name
+				return r.updateDevboxCommitHistory(ctx, devbox, &podList.Items[0])
+			case corev1.PodSucceeded:
 				if controllerutil.RemoveFinalizer(&podList.Items[0], FinalizerName) {
 					if err := r.Update(ctx, &podList.Items[0]); err != nil {
 						logger.Error(err, "remove finalizer failed")
@@ -192,16 +200,11 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 				}
 				_ = r.Delete(ctx, &podList.Items[0])
 				// update commit history status to success by pod name
-				for i := len(devbox.Status.CommitHistory) - 1; i >= 0; i-- {
-					if devbox.Status.CommitHistory[i].Pod == podList.Items[0].Name {
-						devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusSuccess
-						if err := r.Status().Update(ctx, devbox); err != nil {
-							logger.Error(err, "update devbox status failed")
-							return err
-						}
-						return nil
-					}
-				}
+				return r.updateDevboxCommitHistory(ctx, devbox, &podList.Items[0])
+			case corev1.PodFailed:
+				// we can't find the reason of failure, we assume the commit status is failed
+				// todo maybe use pod condition to get the reason of failure and update commit history status to failed by pod name
+				return r.updateDevboxCommitHistory(ctx, devbox, &podList.Items[0])
 			}
 		}
 
@@ -220,32 +223,32 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 				}
 			}
 			_ = r.Delete(ctx, &podList.Items[0])
+			return r.updateDevboxCommitHistory(ctx, devbox, &podList.Items[0])
+		}
+	}
+	return nil
+}
 
-			var commitSuccessFlag bool
-			// check pod status, if pod is pending, we assume the commit status is failed because the pod is not created
-			switch podList.Items[0].Status.Phase {
-			case corev1.PodSucceeded, corev1.PodFailed, corev1.PodRunning:
-				commitSuccessFlag = true
-			case corev1.PodPending:
-				commitSuccessFlag = false
+func commitSuccess(podStatus corev1.PodPhase) bool {
+	switch podStatus {
+	case corev1.PodSucceeded, corev1.PodRunning:
+		return true
+	case corev1.PodPending, corev1.PodFailed:
+		return false
+	}
+	return false
+}
+
+func (r *DevboxReconciler) updateDevboxCommitHistory(ctx context.Context, devbox *devboxv1alpha1.Devbox, pod *corev1.Pod) error {
+	for i := len(devbox.Status.CommitHistory) - 1; i >= 0; i-- {
+		if devbox.Status.CommitHistory[i].Pod == pod.Name {
+			// based on pod status, update commit history status
+			if commitSuccess(pod.Status.Phase) {
+				devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusSuccess
+			} else {
+				devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusFailed
 			}
-			// update commit history status to success by pod name
-			for i := len(devbox.Status.CommitHistory) - 1; i >= 0; i-- {
-				if devbox.Status.CommitHistory[i].Pod == podList.Items[0].Name {
-					// based on pod status, update commit history status
-					if commitSuccessFlag {
-						devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusSuccess
-					} else {
-						devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusFailed
-					}
-					devbox.Status.CommitHistory[i].Status = devboxv1alpha1.CommitStatusSuccess
-					if err := r.Status().Update(ctx, devbox); err != nil {
-						logger.Error(err, "update devbox status failed")
-						return err
-					}
-					return nil
-				}
-			}
+			return r.Status().Update(ctx, devbox)
 		}
 	}
 	return nil
