@@ -72,10 +72,10 @@ func (r *DevboxReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			}
 		}
 	} else {
-		if controllerutil.RemoveFinalizer(devbox, FinalizerName) {
-			if err := r.Update(ctx, devbox); err != nil {
-				return ctrl.Result{}, err
-			}
+		devbox.Spec.State = devboxv1alpha1.DevboxStateStopped
+		controllerutil.RemoveFinalizer(devbox, FinalizerName)
+		if err := r.Update(ctx, devbox); err != nil {
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
@@ -187,7 +187,7 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 		if len(podList.Items) == 1 {
 			// if pod is being deleting, we need remove finalizer and delete pod.
 			removeFlag := false
-			if podList.Items[0].DeletionTimestamp != nil {
+			if !podList.Items[0].DeletionTimestamp.IsZero() {
 				removeFlag = true
 				if controllerutil.RemoveFinalizer(&podList.Items[0], FinalizerName) {
 					_ = r.Update(ctx, &podList.Items[0])
