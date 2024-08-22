@@ -178,14 +178,17 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			return r.Status().Update(ctx, devbox)
 		}
 		// else if pod found, check pod status
-		// if pod is running
-		//    we assume the commit status is success, update commit history status to success by pod name
 		// if pod is pending
-		//    we assume the commit status is failed, update commit history status to failed by pod name
-		// if pod is succeeded, remove finalizer and delete pod, next reconcile will create a new pod, and update commit history status to success
+		//    check if pod is being deleting, if true, we need update commit history status to failed by pod name
+		// if pod is running
+		//    assume the commit status is success, update commit history status to success by pod name
+		// if pod is succeeded
+		//    remove finalizer and delete pod, next reconcile will create a new pod, and update commit history status to success
 		if len(podList.Items) == 1 {
 			// if pod is being deleting, we need remove finalizer and delete pod.
+			removeFlag := false
 			if podList.Items[0].DeletionTimestamp != nil {
+				removeFlag = true
 				if controllerutil.RemoveFinalizer(&podList.Items[0], FinalizerName) {
 					_ = r.Update(ctx, &podList.Items[0])
 				}
@@ -195,7 +198,10 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 			// check pod status and update commit history status
 			switch podList.Items[0].Status.Phase {
 			case corev1.PodPending:
-				// do nothing, wait for next reconcile or wait for pod to be running or failed
+				// if pod is pending and removeFlag is true, update commit history status to failed by pod name
+				if removeFlag {
+					return r.updateDevboxCommitHistory(ctx, devbox, &podList.Items[0])
+				}
 			case corev1.PodRunning:
 				// we do not recreate pod if it is running, even if pod does not have expected values
 				// update commit history status to success by pod name
