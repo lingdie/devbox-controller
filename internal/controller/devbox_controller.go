@@ -184,6 +184,15 @@ func (r *DevboxReconciler) syncPod(ctx context.Context, devbox *devboxv1alpha1.D
 		//    we assume the commit status is failed, update commit history status to failed by pod name
 		// if pod is succeeded, remove finalizer and delete pod, next reconcile will create a new pod, and update commit history status to success
 		if len(podList.Items) == 1 {
+			// if pod is being deleting, we need remove finalizer and delete pod.
+			if podList.Items[0].DeletionTimestamp != nil {
+				if controllerutil.RemoveFinalizer(&podList.Items[0], FinalizerName) {
+					_ = r.Update(ctx, &podList.Items[0])
+				}
+				_ = r.Delete(ctx, &podList.Items[0])
+			}
+
+			// check pod status and update commit history status
 			switch podList.Items[0].Status.Phase {
 			case corev1.PodPending:
 				// do nothing, wait for next reconcile or wait for pod to be running or failed
