@@ -307,6 +307,14 @@ func (r *DevboxReconciler) generateDevboxPod(ctx context.Context, devbox *devbox
 				},
 			},
 		},
+		{
+			Name: "SEALOS_DEVBOX_POD_UID",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.uid",
+				},
+			},
+		},
 	}
 
 	//get image name
