@@ -298,7 +298,7 @@ func (r *DevboxReconciler) generateDevboxPod(ctx context.Context, devbox *devbox
 		},
 		{
 			Name:  "SEALOS_COMMIT_IMAGE_SQUASH",
-			Value: devbox.Spec.Squash,
+			Value: fmt.Sprintf("%v", devbox.Spec.Squash),
 		},
 		{
 			Name: "SEALOS_DEVBOX_PASSWORD",

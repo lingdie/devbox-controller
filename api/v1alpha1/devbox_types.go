@@ -73,7 +73,7 @@ type DevboxSpec struct {
 	Resource ResourceList `json:"resource"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=true
-	Squash string `json:"squash"`
+	Squash bool `json:"squash"`
 	// +kubebuilder:validation:Required
 	RuntimeRef RuntimeRef `json:"runtimeRef"`
 	// +kubebuilder:validation:Required

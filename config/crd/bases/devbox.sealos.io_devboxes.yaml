@@ -104,7 +104,7 @@ spec:
                 type: object
               squash:
                 default: true
-                type: string
+                type: boolean
               state:
                 enum:
                 - Running
