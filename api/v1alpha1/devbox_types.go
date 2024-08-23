@@ -71,6 +71,9 @@ type DevboxSpec struct {
 	State DevboxState `json:"state"`
 	// +kubebuilder:validation:Required
 	Resource ResourceList `json:"resource"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=true
+	Squash string `json:"squash"`
 	// +kubebuilder:validation:Required
 	RuntimeRef RuntimeRef `json:"runtimeRef"`
 	// +kubebuilder:validation:Required

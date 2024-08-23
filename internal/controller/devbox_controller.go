@@ -297,6 +297,10 @@ func (r *DevboxReconciler) generateDevboxPod(ctx context.Context, devbox *devbox
 			Value: nextCommitHistory.Image,
 		},
 		{
+			Name:  "SEALOS_COMMIT_IMAGE_SQUASH",
+			Value: devbox.Spec.Squash,
+		},
+		{
 			Name: "SEALOS_DEVBOX_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{

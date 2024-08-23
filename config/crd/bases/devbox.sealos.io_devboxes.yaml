@@ -102,6 +102,9 @@ spec:
                 required:
                 - name
                 type: object
+              squash:
+                default: true
+                type: string
               state:
                 enum:
                 - Running
