@@ -13,9 +13,10 @@
 # limitations under the License.
 
 FROM gcr.io/distroless/static:nonroot
+ARG TARGETARCH
 
 WORKDIR /
 USER 65532:65532
 
-COPY ./bin/manager /manager
+COPY bin/controller-devbox-$TARGETARCH /manager
 ENTRYPOINT ["/manager"]

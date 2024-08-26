@@ -19,7 +19,6 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/registry"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -38,6 +37,7 @@ import (
 
 	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
 	"github.com/labring/sealos/controllers/devbox/internal/controller"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/registry"
 	// +kubebuilder:scaffold:imports
 )
 
