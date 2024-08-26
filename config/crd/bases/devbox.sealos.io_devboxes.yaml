@@ -103,7 +103,7 @@ spec:
                 - name
                 type: object
               squash:
-                default: true
+                default: false
                 type: boolean
               state:
                 enum:
